@@ -1,5 +1,7 @@
 # dsh-web-fetch
 
+[English](README.md) | **中文**
+
 **通用型 Web 内容获取插件（DeepSeek Harness / Cordis bundle）**
 
 为 DSH Web UI（`dsh --profile web`）提供**双数据源、可扩展策略**的通用网页内容获取能力。两个数据源**各自注册为独立的 DSH 工具**（`web_fetch_cdp` / `web_fetch_tavily`），**由 DSH 的 LLM 模型根据工具描述自主决策调用哪一个**，而不是由死规则决定。

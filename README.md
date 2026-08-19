@@ -7,7 +7,7 @@
 [![DSH Plugin](https://img.shields.io/badge/DSH-Web%20Profile-7c3aed)](https://github.com/deepseek-ai/dsh)
 [![Version](https://img.shields.io/badge/version-0.2.0-orange)](package.json)
 
-**[English]** | [中文说明](#中文说明)
+**English** | [中文](README.zh-CN.md)
 
 ## Why dsh-web-fetch?
 
@@ -180,7 +180,7 @@ PRs welcome! Please:
 
 ### 中文说明
 
-**dsh-web-fetch** 是 DeepSeek Harness 的通用网页内容获取插件，提供 **双数据源、可插拔策略** 能力。核心设计是规避 `registerSearchProvider` 的 `WEB_PROVIDER_AMBIGUOUS` 限制，将每个数据源注册为独立工具，由 LLM 自主决策。
+完整中文文档请见 **[README.zh-CN.md](README.zh-CN.md)**。
 
-详细中文文档见上方英文版（安装/配置/扩展说明已中英对照），`lib/client.js` 内置完整中英文界面。
+**dsh-web-fetch** 是 DeepSeek Harness 的通用网页内容获取插件，提供 **双数据源、可插拔策略** 能力。核心设计是规避 `registerSearchProvider` 的 `WEB_PROVIDER_AMBIGUOUS` 限制，将每个数据源注册为独立工具，由 LLM 自主决策。`lib/client.js` 内置完整中英文界面。
 
