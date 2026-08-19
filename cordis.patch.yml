@@ -1,0 +1,41 @@
+# dsh-web-fetch bundle patch
+#
+# 安装（标准 bundle 插件，不改 dsh 源码）：
+#   dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
+# 卸载：
+#   dsh plugin --profile web remove dsh-web-fetch
+# 安装/卸载后重启 dsh 生效。
+#
+# 本补丁只挂载本插件的 provider 行（cordis id: web-fetch），
+# 默认启用 CDP（http://10.200.0.5:9222），默认禁用 Tavily
+# （需在 Settings 页填 API Key）。
+#
+# 本插件不再通过 ctx.web.registerSearchProvider 注册；每个数据源
+# 都注册为独立的 DSH 工具（web_fetch_cdp / web_fetch_tavily），
+# 由 LLM 根据工具描述自主决策调用哪一个。
+#
+# 如需覆盖，请在 profile 用户层（~/.dsh/profiles/web/cordis.patch.yml）
+# 追加以下段落（整段替换 config，覆盖时需写全所有项）：
+#   - id: web-fetch
+#     config:
+#       cdpEnabled: true
+#       cdpEndpoint: http://10.200.0.5:9222
+#       cdpTimeoutMs: 60000
+#       cdpWaitMs: 2000
+#       tavilyEnabled: false
+#       tavilyEndpoint: https://api.tavily.com/extract
+#       tavilyApiKey: ''
+#       tavilyTimeoutMs: 30000
+
+- insert:
+    - id: web-fetch
+      name: 'dsh-web-fetch'
+      config:
+        cdpEnabled: true
+        cdpEndpoint: 'http://10.200.0.5:9222'
+        cdpTimeoutMs: 60000
+        cdpWaitMs: 2000
+        tavilyEnabled: false
+        tavilyEndpoint: 'https://api.tavily.com/extract'
+        tavilyApiKey: ''
+        tavilyTimeoutMs: 30000

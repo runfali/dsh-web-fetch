@@ -1,0 +1,43 @@
+{
+  "name": "dsh-web-fetch",
+  "version": "0.2.0",
+  "description": "Generic Web content fetcher plugin for DeepSeek Harness with dual pluggable data sources (CDP browser + Tavily). Each data source is registered as its own tool so the LLM can pick context-appropriately. Zero-intrusion bundle plugin; follows strategy pattern.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "tests",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh", "dsh-plugin", "deepseek-harness", "web-fetch",
+    "chrome-devtools-protocol", "cdp", "tavily", "strategy"
+  ],
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.7",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.7",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {},
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  }
+}
