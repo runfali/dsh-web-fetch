@@ -61,15 +61,16 @@ export function makeTavilyStrategy(config) {
       try { data = await res.json() } catch (err) {
         throw new Error("Tavily returned unparseable JSON (HTTP " + res.status + ")")
       }
-      const results = data.results || []
+      const results = data.results || data.data || []
       const out = []
       for (const item of results) {
-        const url = item.url || ""
+        const url = item.url || item.link || ""
         if (!url) continue
         try { const u = new URL(url); if (u.protocol !== "http:" && u.protocol !== "https:") continue } catch { continue }
-        const title = item.title || ""
-        const raw = item.rawData ? item.rawData.join("\n\n") : (item.content || item.text || "")
-        const body = plainText(raw)
+        const title = item.title || item.name || ""
+        // 兼容 Tavily 新旧字段：raw_content (下划线)、rawContent、rawData、content
+        const raw = item.raw_content ?? item.rawContent ?? item.raw_text ?? (item.rawData ? item.rawData.join("\n\n") : "") ?? item.content ?? item.text ?? item.snippet ?? ""
+        const body = plainText(String(raw || ""))
         out.push(source(url, {
           title: plainText(title),
           snippet: body ? truncate(body, 400) : "",

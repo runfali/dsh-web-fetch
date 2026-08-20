@@ -26,6 +26,9 @@ import { defineTool } from "@deepseek-ai/dsh-tools"
 import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings"
 import { makeCdpStrategy } from "./strategies/cdp.js"
 import { makeTavilyStrategy } from "./strategies/tavily.js"
+import { readFileSync, existsSync } from "node:fs"
+import { homedir } from "node:os"
+import { join } from "node:path"
 
 export const name = "web-fetch"
 export const SETTINGS_NS = settingsNamespace("web-fetch")
@@ -125,14 +128,58 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
     },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const cfg = configReader()
-      const enabled = cfg[enabledField] !== false
+      let cfg = configReader()
+      // 兼容 DSH 升级后 settings 异步加载的竞态：若首次读取为禁用，等待 800ms 再取一次
+      let enabled = cfg[enabledField] === true
+      if (!enabled && cfg[enabledField] !== false) {
+        // 字段缺失或类型异常时，按 truthy 判断（兼容旧存储 string "true"）
+        enabled = !!cfg[enabledField]
+      }
       if (!enabled) {
-        throw new Error("web-fetch (" + strategyId + "): data source disabled in settings. Enable it in Settings → Plugin Config → " + name + ".")
+        // 再给一次机会：等待 settings publish（文件监听或 API 同步）
+        await new Promise((r) => setTimeout(r, 800))
+        try {
+          cfg = configReader()
+          enabled = cfg[enabledField] === true || !!cfg[enabledField]
+        } catch {}
+      }
+      // 兜底：若内存态仍为 false，但磁盘文件已为 true（经由 gateway 的 loopback 补丁时序或 file watcher 延迟），直接读文件
+      if (!enabled) {
+        try {
+          const dshHome = process.env.DSH_HOME || join(homedir(), ".dsh")
+          const candidates = [join(dshHome, "settings.yaml"), join(dshHome, "settings.yml"), join(dshHome, "settings.json")]
+          let text = null
+          for (const p of candidates) {
+            if (existsSync(p)) { try { text = readFileSync(p, "utf8"); break } catch {} }
+          }
+          if (text && text.includes("tavilyEnabled: true") && strategyId === "tavily") {
+            // 从文件粗略提取 tavilyApiKey（避免引入 yaml 依赖，用正则）
+            const m = text.match(/tavilyApiKey:\s*([^\n#]+)/)
+            const fileKey = m ? m[1].trim().replace(/^['"]|['"]$/g, "") : ""
+            cfg = { ...cfg, tavilyEnabled: true, tavilyApiKey: fileKey || cfg.tavilyApiKey }
+            enabled = true
+          }
+          if (text && text.includes("cdpEnabled: true") && strategyId === "cdp") {
+            cfg = { ...cfg, cdpEnabled: true }
+            enabled = true
+          }
+        } catch {}
+      }
+      if (!enabled) {
+        const cur = (() => { try { return JSON.stringify({ [enabledField]: cfg[enabledField], cdpEnabled: cfg.cdpEnabled, tavilyEnabled: cfg.tavilyEnabled }) } catch { return String(cfg[enabledField]) } })()
+        throw new Error(
+          "web-fetch (" + strategyId + "): data source disabled in settings (current " + cur + "). Enable it in Settings → Plugin Config → " + name + " (or set web-fetch." + enabledField + ": true in ~/.dsh/settings.yaml) and wait 1s for hot-reload."
+        )
       }
       const strategy = factory(cfg)
       if (!strategy.available()) {
-        throw new Error("web-fetch (" + strategyId + "): data source unavailable. Check configuration in Settings → Plugin Config → " + name + ".")
+        // 区分“未启用”与“配置不完整”：给出更具体的提示
+        const hint = strategyId === "tavily" && !cfg.tavilyApiKey
+          ? " (tavilyApiKey is empty — paste one from https://app.tavily.com)"
+          : strategyId === "cdp" && !cfg.cdpEndpoint
+          ? " (cdpEndpoint is empty)"
+          : ""
+        throw new Error("web-fetch (" + strategyId + "): data source unavailable — strategy.available() returned false" + hint + ". Check configuration in Settings → Plugin Config → " + name + ".")
       }
       try {
         const result = await strategy.fetch({ query: String(args.query) }, exec && exec.signal)
