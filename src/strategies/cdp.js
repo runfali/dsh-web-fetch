@@ -1,6 +1,6 @@
 /**
  * dsh-web-fetch — CDP（Chrome DevTools Protocol）数据源策略。
- * 适配 DSH 0.1.0-rc.7 + cloakbrowser (Python aiohttp)：
+ * 适配 DSH 0.1.0-rc.8 + cloakbrowser (Python aiohttp)：
  * - 优先使用 browser WS 通过 Target.createTarget 创建隔离页面，避免导航污染 Harness 自身页面；
  * - 回退：若 browser 域不可用，则复用 /json/list 的 page WS（会短暂污染但保证可用）；
  * - 客户端帧按 RFC6455 掩码，移除 permessage-deflate 扩展头；
