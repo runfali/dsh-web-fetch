@@ -25,7 +25,7 @@ Both can be **independently enabled/disabled** — disabled tools are hidden fro
 ## Features
 
 - **Dual pluggable strategies** — CDP + Tavily out of the box, add a new one with 1 file + 1 line
-- **Zero-intrusion** — Cordis bundle plugin, no DSH core patch. All via `ctx.tools.register` / `ctx.settings.register` / `installSettingsSection`
+- **Zero-intrusion** — Cordis bundle plugin, no DSH core patch. All via `ctx.tools.register` / `settings.installSection` (dsh ≥ 0.1.2-alpha)
 - **Zero extra deps** — only `@deepseek-ai/dsh-settings`, `@deepseek-ai/dsh-tools`, `@deepseek-ai/schemastery`
 - **Live config** — settings UI card + `~/.dsh/settings.yaml` hot-reload, no restart needed
 - **Concurrency-safe** — `isConcurrencySafe: true`, supports `AbortSignal`

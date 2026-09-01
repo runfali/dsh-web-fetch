@@ -23,7 +23,8 @@
  */
 import z from "@deepseek-ai/schemastery"
 import { defineTool } from "@deepseek-ai/dsh-tools"
-import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings"
+// dsh 0.1.2-alpha.3：installSettingsSection/settingsNamespace 已从 dsh-settings 移除，
+// 设置接线改用 provider 方法 settings.installSection(owner, ns, schema, entry, hooks)。
 import { makeCdpStrategy } from "./strategies/cdp.js"
 import { makeTavilyStrategy } from "./strategies/tavily.js"
 import { readFileSync, existsSync } from "node:fs"
@@ -31,7 +32,9 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 export const name = "web-fetch"
-export const SETTINGS_NS = settingsNamespace("web-fetch")
+/** dsh 0.1.2-alpha 起 settingsNamespace() brand 辅助已移除；
+ * 命名空间在 settings.register/installSection 处校验（小写连字符标识符）。 */
+export const SETTINGS_NS = "web-fetch"
 
 /**
  * 设置命名空间的字段模式。每个策略一段独立字段，可视化界面按策略分组。
@@ -198,9 +201,16 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
  */
 export function apply(ctx, config = {}) {
   let current = () => config
-  installSettingsSection(ctx, SETTINGS_NS, Config, config, {
-    setSource: (source) => { current = source },
-    onChange: () => {}
+  // dsh 0.1.2-alpha.3：独立 installSettingsSection 帮助函数已从 dsh-settings 移除，
+  // 同样的接线改为 provider 上的 settings.installSection(owner, ns, schema, entry, hooks)
+  // （宿主源码级核对：register(base=entry) → setSource(scope.get) → 卸载回落 effect →
+  // onChange() 同步首发 → scope.watch 持续通知）。settings 晚于本插件 apply 时到达，
+  // 工具 execute 里的 current() 闭包天然兼容晚接线。
+  ctx.inject(["settings"], (sctx) => {
+    sctx.settings.installSection(ctx, SETTINGS_NS, Config, config, {
+      setSource: (source) => { current = source },
+      onChange: () => {}
+    })
   })
 
   // 为每个策略注册独立工具；只有 enabled 的策略在 execute 中才真正可用

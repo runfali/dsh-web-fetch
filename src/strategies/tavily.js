@@ -69,7 +69,8 @@ export function makeTavilyStrategy(config) {
         try { const u = new URL(url); if (u.protocol !== "http:" && u.protocol !== "https:") continue } catch { continue }
         const title = item.title || item.name || ""
         // 兼容 Tavily 新旧字段：raw_content (下划线)、rawContent、rawData、content
-        const raw = item.raw_content ?? item.rawContent ?? item.raw_text ?? (item.rawData ? item.rawData.join("\n\n") : "") ?? item.content ?? item.text ?? item.snippet ?? ""
+        // rawData 分支用 null 保持 ?? 链穿透（"" 非 nullish 会截断后续 content/text 回退）
+        const raw = item.raw_content ?? item.rawContent ?? item.raw_text ?? (item.rawData ? item.rawData.join("\n\n") : null) ?? item.content ?? item.text ?? item.snippet ?? ""
         const body = plainText(String(raw || ""))
         out.push(source(url, {
           title: plainText(title),

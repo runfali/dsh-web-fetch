@@ -16,7 +16,7 @@
 ## 设计目标
 
 - **零依赖**：除 DSH 平台自带包（`@deepseek-ai/dsh-settings`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/schemastery`）外无任何第三方库；
-- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（`installSettingsSection`、`ctx.tools.register`、`ctx.systemPrompt.section`）实现；
+- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（`settings.installSection`（dsh ≥ 0.1.2-alpha）、`ctx.tools.register`、`ctx.systemPrompt.section`）实现；
 - **可扩展**：每个数据源是一个**独立的策略实现**（`src/strategies/*.js`），遵循统一的 `FetchStrategy` 契约；新增数据源只需添加一个新策略文件并在入口 `src/index.js` 追加一行 `ctx.tools.register(makeToolDef(...))`——核心路由与入口无需改动。
 
 ## 为什么不用 ctx.web.registerSearchProvider
