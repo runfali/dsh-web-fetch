@@ -12,13 +12,19 @@ const RAW = "  <p> Hello <b>world</b>,  this is  test content.</p>  **bold**  ";
 
 function stubFetch(body) {
   const real = globalThis.fetch
-  globalThis.fetch = async () => ({
-    ok: true,
-    status: 200,
-    json: async () => body
-  })
+  globalThis.fetch = async (url, opts) => {
+    lastBody = opts && opts.body ? JSON.parse(opts.body) : null
+    return {
+      ok: true,
+      status: 200,
+      json: async () => body
+    }
+  }
   return () => { globalThis.fetch = real }
 }
+
+/** 最近一次请求体（maxResults 透传断言用） */
+let lastBody = null
 
 async function run() {
   console.log("[Tavily strategy]")
@@ -66,6 +72,22 @@ async function run() {
     assert.ok(r.sources[0].snippet.length > 0 && r.sources[0].snippet.length <= 401)
     assert.equal(r.truncated, false)
     console.log("  ✓ URL 查询 + raw 字段解析 + 纯文本清洗")
+  }
+
+  {
+    const s = makeTavilyStrategy({ apiKey: "k123" })
+    const clean = stubFetch({ results: [ { url: "https://a.com", title: "A", content: "c" } ] })
+    lastBody = null
+    await s.fetch({ query: "https://a.com", maxResults: 12 })
+    clean()
+    assert.equal(lastBody.maxResults, 12, "maxResults 应透传请求体")
+    console.log("  ✓ maxResults 透传")
+    const clean2 = stubFetch({ results: [ { url: "https://a.com", title: "A", content: "c" } ] })
+    lastBody = null
+    await s.fetch({ query: "https://a.com" })
+    clean2()
+    assert.equal(lastBody.maxResults, 5, "缺省 maxResults 回退 5")
+    console.log("  ✓ maxResults 缺省 5")
   }
 
   {

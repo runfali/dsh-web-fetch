@@ -40,9 +40,10 @@ export function makeTavilyStrategy(config) {
       if (!req.query || !String(req.query).trim()) throw new Error("Tavily requires a non-empty URL/query")
       const query = String(req.query).trim()
       const isUrl = /^https?:\/\//i.test(query)
+      const maxResults = Number(req.maxResults) > 0 ? Math.trunc(Number(req.maxResults)) : 5
       const body = isUrl
-        ? { urls: [query], maxResults: 5, includeRawContent: true, api_key: cfg.apiKey }
-        : { query, maxResults: 5, includeRawContent: true, api_key: cfg.apiKey }
+        ? { urls: [query], maxResults, includeRawContent: true, api_key: cfg.apiKey }
+        : { query, maxResults, includeRawContent: true, api_key: cfg.apiKey }
       const timeout = withTimeout(signal, cfg.timeoutMs)
       let res
       try {

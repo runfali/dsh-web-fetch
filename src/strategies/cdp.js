@@ -16,7 +16,7 @@ const DEFAULT_TIMEOUT_MS = 60000
 const DEFAULT_WAIT_MS = 2000
 const WS_MAX_FRAME = 6 * 1024 * 1024
 
-function encodeFrame(message) {
+export function encodeFrame(message) {
   const data = Buffer.from(message, "utf8")
   const len = data.length
   const mask = randomBytes(4)
@@ -38,7 +38,7 @@ function encodeFrame(message) {
   return Buffer.concat([header, mask, masked])
 }
 
-function parseFrameHeader(slice) {
+export function parseFrameHeader(slice) {
   if (slice.length < 2) return null
   const fin = (slice[0] & 0x80) !== 0
   const opcode = slice[0] & 0x0f
