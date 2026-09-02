@@ -183,8 +183,10 @@ export function apply(ctx, config = {}) {
   })
 
   // 为每个策略注册独立工具；只有 enabled 的策略在 execute 中才真正可用
-  ctx.tools.register(makeToolDef("cdp", makeCdpStrategy, "cdpEnabled", current))
-  ctx.tools.register(makeToolDef("tavily", makeTavilyStrategy, "tavilyEnabled", current))
+  // 注意：不能直接传 current（参数传值是快照，setSource 之后的更新到不了 execute 端）；
+  // 须传包装 thunk 每次现取 current()，保持对变量的活引用。
+  ctx.tools.register(makeToolDef("cdp", makeCdpStrategy, "cdpEnabled", () => current()))
+  ctx.tools.register(makeToolDef("tavily", makeTavilyStrategy, "tavilyEnabled", () => current()))
 }
 
 /** Cordis 注入项。 */
