@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-fetch",
-  "version": "0.3.0",
+  "version": "0.1.2-alpha.4",
   "description": "Generic Web content fetcher plugin for DeepSeek Harness with dual pluggable data sources (CDP browser + Tavily). Each data source is registered as its own tool so the LLM can pick context-appropriately. Zero-intrusion bundle plugin; follows strategy pattern.",
   "type": "module",
   "main": "src/index.js",
