@@ -87,14 +87,14 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
     name: "web_fetch_" + strategyId,
     description: strategyId === "cdp"
       ? "Fetch the rendered content of a URL via the CDP browser (cloakbrowser). Best for pages requiring JavaScript rendering, interactive apps, or direct browser-based scraping. Provide a URL (scheme optional)."
-      : "Fetch page content via Tavily Extract API. Fast, no browser needed. Provide a URL or a natural-language topic. Requires a Tavily API key to be configured.",
+      : "Fetch page content of a specific URL via Tavily Extract API. Fast, no browser needed. URLs only — it cannot search: use web_search to find pages, then extract a result URL here. Requires a Tavily API key to be configured.",
     parameters: {
       query: {
         type: "string",
         required: true,
         description: strategyId === "cdp"
           ? "The URL to fetch (e.g. https://example.com/page or example.com)."
-          : "A URL to extract, or a natural-language topic to search and extract."
+          : "The URL to extract (e.g. https://example.com/page). Not a search box — pass a URL found via web_search."
       },
       maxResults: {
         type: "number",
