@@ -124,12 +124,36 @@ async function run() {
   }
 
   {
+    // 回归：上游载荷的 results 里夹带 null / 非对象元素时不得让整次抓取炸掉。
+    // 旧实现直接 item.url → TypeError: Cannot read properties of null，可用结果被一起葬送。
+    const s = makeTavilyStrategy({ apiKey: "k123" })
+    const clean = stubFetch({ results: [ null, "junk", 42, { url: "https://ok.com", content: "good" } ] })
+    const r = await s.fetch({ query: "https://ok.com" })
+    clean()
+    assert.equal(r.sources.length, 1, "非对象元素应被跳过，合法条目照常返回")
+    assert.equal(r.sources[0].url, "https://ok.com")
+    assert.ok(r.sources[0].content.includes("good"))
+    console.log("  ✓ 病态载荷（null/字符串/数字元素）被跳过而非抛出")
+  }
+
+  {
+    // 回归：data 本身缺失/null 时回退空数组，走「无结果」的明确错误而非 TypeError
+    const s = makeTavilyStrategy({ apiKey: "k123" })
+    const clean = stubFetch({ results: null })
+    let msg
+    try { await s.fetch({ query: "x" }); assert.fail("should throw") } catch (e) { msg = String(e.message) }
+    clean()
+    assert.ok(msg.includes("no results"), "应为明确的无结果错误，实际: " + msg)
+    console.log("  ✓ results 为 null 时报「无结果」而非崩溃")
+  }
+
+  {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     try { await s.fetch({ query: "" }); assert.fail("should throw") } catch {}
     console.log("  ✓ 空 query 时报错")
   }
 
   console.log("========================================")
-  console.log("  all 7 tavily tests passed")
+  console.log("  all tavily tests passed")
 }
 run().catch(e => { console.error(e); process.exit(1) })

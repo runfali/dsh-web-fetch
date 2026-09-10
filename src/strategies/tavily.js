@@ -62,9 +62,12 @@ export function makeTavilyStrategy(config) {
       try { data = await res.json() } catch (err) {
         throw new Error("Tavily returned unparseable JSON (HTTP " + res.status + ")")
       }
-      const results = data.results || data.data || []
+      const results = (data && (data.results || data.data)) || []
       const out = []
       for (const item of results) {
+        // 上游载荷可能夹带 null / 非对象元素（网关改写、部分失败的结果数组）；
+        // 直接取属性会抛 TypeError 让整次抓取失败，故先做非对象守卫再判定可用性。
+        if (item === null || typeof item !== "object") continue
         const url = item.url || item.link || ""
         if (!url) continue
         try { const u = new URL(url); if (u.protocol !== "http:" && u.protocol !== "https:") continue } catch { continue }
