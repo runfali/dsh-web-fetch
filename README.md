@@ -49,7 +49,8 @@ dsh-web-fetch/
     ├── host-integration.test.mjs # real Cordis + ToolRuntime + file settings provider
     ├── test-cdp-unit.mjs        # 21 tests (helpers 8 + factory 5 + router 8)
     ├── test-cdp-frames.mjs      # 5 tests (RFC6455 frame encode/decode)
-    └── test-tavily-unit.mjs     # 13 tests (availability, parsing, error paths, malformed payloads)
+    ├── test-tavily-unit.mjs     # 13 tests (availability, parsing, error paths, malformed payloads)
+    └── client-smoke.mjs         # 15 checks (browser half: render + interaction + read-only)
 ```
 
 **Strategy contract** (`src/types.js`):

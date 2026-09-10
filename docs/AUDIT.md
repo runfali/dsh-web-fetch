@@ -54,7 +54,7 @@
 **API 层零破坏**：插件依赖的每个契约在 0.1.5-rc.1 上均未变，`src/` 业务逻辑无需适配性修改。
 改动面 = **声明面 + 测试面 + 文档面**，外加审计中发现并修复的 **1 个真缺陷（P2）**。
 
-测试从 33 项扩到 **55 项全绿**（entry 11 + host-integration 5 + cdp-frames 5 + cdp-unit 21 + tavily 13）。
+测试从 33 项扩到 **55 项全绿 + client 15 项交互断言**（entry 11 + host-integration 5 + cdp-frames 5 + cdp-unit 21 + tavily 13；client-smoke 另外 15 项）。
 
 ## 二、契约级对照（0.1.5-rc.1 实测，全部通过 ✅）
 
@@ -98,7 +98,7 @@
 因此**覆盖不了 `0.1.5-rc.1`**（`0.1.5-alpha.1` 也不行）。这正是「声明适配 0.1.5，却不被自己的声明覆盖」。
 修法是**加析取**（不动上界语义）。同一陷阱适用于**每一处** dsh 版本区间——本轮改了 4 处。
 
-## 五、测试面（33 → 55）
+## 五、测试面（33 → 55 + client 15）
 
 | 文件 | 项数 | 覆盖 |
 |---|---|---|
@@ -107,11 +107,14 @@
 | `tests/test-cdp-frames.mjs` | 5 | RFC6455 帧编解码（已有，本轮纳入 `pnpm test`） |
 | `tests/test-cdp-unit.mjs` | 21 | helpers / 策略工厂 / Router（已有） |
 | `tests/test-tavily-unit.mjs` | 13 | 原有 11 + **病态载荷 2 项回归** |
+| `tests/client-smoke.mjs` | 15 | 浏览器半：结构加载 / locale / slot 契约 / **交互层盲区**（dsh-plugin-audit 反复强调的「本地全绿、真机翻车」区）：可写态 8 控件不禁用、只读态全禁用（含保存按钮）、开关落 user 层、数字以 number 落盘、清空回落默认、非法输入置 invalid |
 
 **每条守护都跑了反证变红**（守则：绿的测试不证明有牙齿）：
 1. 把 `dsh.engines.dsh` 改回旧单区间 → engines 3 项全红；
 2. 把 client `FIELD_KEYS` 改一个键名 → 键集合一致性测试红（「静默调不到开关」那类缺陷）；
 3. 把 `() => current()` 改回传 `current`（快照）→ entry 1 项 + host-integration 2 项红。
+4. 把只读态绑定的 `disabled: props.disabled` 写成 `disabled: false` → client smoke 红（「控件永远禁用/永不禁用」正是真机翻车形态）；
+5. 数字字段改写成 `String(n)` 落盘 → client smoke 红。
 
 ## 六、本轮审计角度的诚实缺口
 

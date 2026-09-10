@@ -54,6 +54,7 @@ dsh-web-fetch/
 |   |-- host-integration.test.mjs # 真宿主对象契约测试
 |   |-- test-cdp-unit.mjs         # CDP 策略单元测试（纯本地）
 |   |-- test-cdp-frames.mjs       # WebSocket 帧编解码测试
+|   `-- client-smoke.mjs          # client half：渲染 + 交互 + 只读态
 `-- test-tavily-unit.mjs      # Tavily 策略单元测试（纯本地）
 ```
 
@@ -170,6 +171,7 @@ pnpm test:host     # 只跑真宿主契约测试
 - **test-cdp-unit.mjs** — 21 项：helpers（8）+ CDP 策略工厂（5）+ Router（8）；
 - **test-cdp-frames.mjs** — 5 项：RFC6455 帧编解码与边界；
 - **test-tavily-unit.mjs** — 13 项：Tavily 策略的可用性、解析、错误路径、病态载荷。
+- **client-smoke.mjs** — 15 项：浏览器半结构加载 + locale 键集合 + slot 注册契约 + **交互层盲区**（可写态控件不禁用 / 只读态全禁用含保存按钮 / 开关落 user 层 / 数字字段以 number 落盘 / 清空文本回落默认 / 非法输入置 invalid）。
 
 ## 限制
 

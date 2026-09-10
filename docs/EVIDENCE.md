@@ -25,7 +25,7 @@
 | web seam 歧义规则 | 读 `dsh-web/lib/index.js:130` | `WEB_PROVIDER_AMBIGUOUS` 仍存在，架构决定仍正确 |
 | host 服务名 | 宿主 `super(ctx, "tools")` | 未变 |
 
-## 测试结果（55 项全绿）
+## 测试结果（55 项 + client 15 项交互断言，全绿）
 
 ```
 tests/entry.test.mjs             11 pass
@@ -33,6 +33,7 @@ tests/host-integration.test.mjs   5 pass
 tests/test-cdp-frames.mjs         5 pass
 tests/test-cdp-unit.mjs          21 pass
 tests/test-tavily-unit.mjs       13 pass
+tests/client-smoke.mjs           15 checks pass
 ```
 
 ## 反证记录（证明守护有牙齿）
@@ -42,7 +43,9 @@ tests/test-tavily-unit.mjs       13 pass
 | `dsh.engines.dsh` 改回 `>=0.1.2-alpha.3 <0.2.0` | engines 判定表 / 反证 / 交叉验证 3 项 | ✅ 3 项全红 |
 | client `FIELD_KEYS` 改一个键名 | 键集合一致性 | ✅ 红（"host schema and client form must agree"） |
 | `() => current()` 改回传 `current`（快照） | entry 1 项 + host-integration 2 项 | ✅ 3 项全红 |
-| 恢复全部改动 | 全绿 | ✅ 55 项全绿 |
+| 只读态 disabled 绑定写成恒 false | client smoke | ✅ 红（「只读态下所有控件必须禁用」） |
+| 数字字段落盘改写成 String(n) | client smoke | ✅ 红（「数字字段必须以 number 落盘」） |
+| 恢复全部改动 | 全绿 | ✅ 55 项 + client 15 项全绿 |
 
 ## 未覆盖的缺口（诚实记录）
 
@@ -57,7 +60,7 @@ tests/test-tavily-unit.mjs       13 pass
 cd <checkout>
 export http_proxy=http://10.220.0.35:10808 https_proxy=http://10.220.0.35:10808
 pnpm install          # 断言 node_modules 里的 dsh-* 版本 = 0.1.5-rc.1
-pnpm test             # 55 项全绿
+pnpm test             # 55 项 + client 15 项，全绿
 pnpm test:host        # 只跑真宿主契约测试
 ```
 
