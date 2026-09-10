@@ -89,7 +89,7 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
       ? "Fetch the rendered content of a URL via the CDP browser (cloakbrowser). Best for pages requiring JavaScript rendering, interactive apps, or direct browser-based scraping. Provide a URL (scheme optional)."
       : "Fetch page content of a specific URL via Tavily Extract API. Fast, no browser needed. URLs only — it cannot search: use web_search to find pages, then extract a result URL here. Requires a Tavily API key to be configured.",
     parameters: {
-      query: {
+      url: {
         type: "string",
         required: true,
         description: strategyId === "cdp"
@@ -152,7 +152,7 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
       }
       try {
         const result = await strategy.fetch({
-          query: String(args.query),
+          url: String(args.url),
           ...(strategyId === "tavily" && args.maxResults !== undefined ? { maxResults: args.maxResults } : {})
         }, exec && exec.signal)
         return projectResult(result)

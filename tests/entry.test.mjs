@@ -75,8 +75,10 @@ test('entry: 每个工具都满足 host defineTool 的强制声明（output.sche
     assert.equal(typeof tool.output, 'object', tool.name + ' must declare output')
     assert.equal(typeof tool.output.render, 'function', tool.name + ' must declare output.render')
     assert.equal(typeof tool.execute, 'function')
-    assert.ok(tool.parameters && tool.parameters.properties && tool.parameters.properties.query,
-      tool.name + ' must declare a query parameter')
+    assert.ok(tool.parameters && tool.parameters.properties && tool.parameters.properties.url,
+      tool.name + ' must declare a url parameter')
+    assert.equal(Object.hasOwn(tool.parameters.properties, 'query'), false,
+      tool.name + ' must not declare a legacy query parameter (renamed to url)')
   }
 })
 
@@ -89,7 +91,7 @@ test('entry: settings.setSource 热更新活引用（闭包传参快照陷阱）
   const cdp = registered.find((t) => t.name === 'web_fetch_cdp')
   // 启用后不应再抛「data source disabled」——改为走到真实连接失败路径
   let message = ''
-  try { await cdp.execute({ query: 'example.com' }, undefined) } catch (err) { message = String(err.message) }
+  try { await cdp.execute({ url: 'example.com' }, undefined) } catch (err) { message = String(err.message) }
   assert.ok(!message.includes('data source disabled'),
     'execute must read the live source, not the apply-time snapshot; got: ' + message)
   assert.ok(/web-fetch \(cdp\)/.test(message), 'should fail later in the fetch path; got: ' + message)
@@ -99,7 +101,7 @@ test('entry: 禁用态抛错文案含字段名与当前值（可诊断）', asyn
   const { ctx, registered } = makeCtx()
   ENTRY.apply(ctx, { cdpEnabled: false, tavilyEnabled: false })
   const cdp = registered.find((t) => t.name === 'web_fetch_cdp')
-  await assert.rejects(() => cdp.execute({ query: 'https://example.com' }, undefined),
+  await assert.rejects(() => cdp.execute({ url: 'https://example.com' }, undefined),
     (err) => err.message.includes('data source disabled') && err.message.includes('cdpEnabled'))
 })
 

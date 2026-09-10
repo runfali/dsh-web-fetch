@@ -323,8 +323,8 @@ export function makeCdpStrategy(config) {
       catch { return false }
     },
     async fetch(req, signal) {
-      if (!req.query || !String(req.query).trim()) throw new Error("CDP requires a non-empty URL/query")
-      let url = String(req.query).trim()
+      if (!req.url || !String(req.url).trim()) throw new Error("CDP requires a non-empty URL (parameter `url`)")
+      let url = String(req.url).trim()
       if (!/^https?:\/\//i.test(url)) url = "http://" + url
       const browserClient = new CdpClient(endpoint, cfg)
       await browserClient.connect()

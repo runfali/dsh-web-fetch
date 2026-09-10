@@ -11,6 +11,18 @@
 - **CDP 浏览器**（`web_fetch_cdp`）— 通过 Chrome DevTools Protocol HTTP 端点（默认 `http://10.200.0.5:9222`）连接本地部署的远程浏览器（如 `cloakbrowser`），用真实渲染获取动态页面内容；适合需要 JavaScript 渲染的页面；
 - **Tavily**（`web_fetch_tavily`）— 通过 Tavily Extract API 获取页面内容，只需在设置页填写 `API Key`；速度快，不需要浏览器。
 
+**工具参数（两个工具完全一致）：**
+
+| 参数 | 必填 | 类型 | 含义 |
+|---|---|---|---|
+| `url` | 是 | string | 要抓取的页面 URL（可省略协议，如 `https://example.com/page` 或 `example.com`） |
+| `maxResults` | 否 | number | 最多返回条数——仅 Tavily 生效，默认 5 |
+
+> **`v0.1.5-rc.1` 起改名：** 该参数原名为 `query`。旧名与 Tavily `/extract` 请求体里真正的
+> `query` 字段（语义是**搜索词**）同名，误导调用方把搜索主题词当 URL 传进来。现已更名为 `url`。
+> 旧名**刻意不做兼容别名**——它会以 `invalid arguments: missing required property "url"`
+> 响亮失败，这条报错本身就是迁移提示。
+
 两个数据源**可独立启用/禁用**；未被启用的数据源对应的工具不会呈现给 LLM。
 
 ## 设计目标

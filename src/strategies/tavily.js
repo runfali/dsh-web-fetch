@@ -37,13 +37,15 @@ export function makeTavilyStrategy(config) {
       catch { return false }
     },
     async fetch(req, signal) {
-      if (!req.query || !String(req.query).trim()) throw new Error("Tavily requires a non-empty URL/query")
-      const query = String(req.query).trim()
-      const isUrl = /^https?:\/\//i.test(query)
+      if (!req.url || !String(req.url).trim()) throw new Error("Tavily requires a non-empty URL (parameter `url`)")
+      // 工具层入参统一叫 url（搜索请走 web_search）；这里叫 input，
+      // 避免与 Tavily /extract 请求体里真正的 query 字段混淆。
+      const input = String(req.url).trim()
+      const isUrl = /^https?:\/\//i.test(input)
       const maxResults = Number(req.maxResults) > 0 ? Math.trunc(Number(req.maxResults)) : 5
       const body = isUrl
-        ? { urls: [query], maxResults, includeRawContent: true, api_key: cfg.apiKey }
-        : { query, maxResults, includeRawContent: true, api_key: cfg.apiKey }
+        ? { urls: [input], maxResults, includeRawContent: true, api_key: cfg.apiKey }
+        : { query: input, maxResults, includeRawContent: true, api_key: cfg.apiKey }
       const timeout = withTimeout(signal, cfg.timeoutMs)
       let res
       try {

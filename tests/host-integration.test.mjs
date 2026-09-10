@@ -112,11 +112,12 @@ test('host-contract: 真实 ToolRuntime 接受两个工具注册，命名空间�
     const namespaces = host.store.describe().map((d) => d.ns)
     assert.ok(namespaces.includes(SETTINGS_NS),
       'host must serve the namespace: ' + JSON.stringify(namespaces))
-    // schema 投影（喂给模型的形态）保留必填 query 参数
+    // schema 投影（喂给模型的形态）保留必填 url 参数
     const schemas = host.tools.schemas()
     const tavily = schemas.find((s) => s.name === 'web_fetch_tavily')
     assert.ok(tavily, 'schema projection must include the tavily tool')
-    assert.ok(tavily.parameters.properties.query, 'query parameter must survive projection')
+    assert.ok(tavily.parameters.properties.url, 'url parameter must survive projection')
+    assert.ok(!tavily.parameters.properties.query, 'legacy query parameter must be gone after the rename')
     assert.equal(typeof tavily.parameters.properties.maxResults.type, 'string',
       'maxResults is a JSON-schema type string after compilation')
   } finally { host.cleanup() }
@@ -135,13 +136,24 @@ test('host-contract: 端到端 execute——真 schemastery 解析的配置 + �
 
     // host 的 defineTool 包装了 execute：非法参数应被 ToolArgsError 挡在业务前
     await assert.rejects(() => tool.execute({}, undefined),
-      (err) => err.name === 'ToolArgsError' || /query/.test(String(err.message)),
+      (err) => err.name === 'ToolArgsError' || /url/.test(String(err.message)),
       'host schema validation must reject a missing required parameter')
+
+    // 回归：参数已由 query 改名为 url，旧名必须「响亮失败」而非静默降级。
+    // 实测证据（真 host 探针）：execute({}) 与 execute({query:...}) 得到同一个
+    // ToolArgsError: invalid arguments: missing required property "url"，
+    // 且两者都没走到网络层（对照 execute({url:...}) 才发出真实请求）——
+    // 即校验发生在 execute 之前。故任何「兼容旧名」的别名分支在真 host 上永不可达，
+    // 写它就是死代码，只会伪装出健壮性。迁移友好性改由这条错误原文承担：
+    // 它直接点出新参数名 url（README 亦有迁移说明）。
+    await assert.rejects(() => tool.execute({ query: 'https://a.example' }, undefined),
+      (err) => err.name === 'ToolArgsError' || /url|missing/i.test(String(err.message)),
+      'the legacy name must be rejected, not silently accepted')
 
     const calls = []
     const restore = stubFetch(calls, SAMPLE)
     try {
-      const value = await tool.execute({ query: 'https://a.example' }, { signal: undefined })
+      const value = await tool.execute({ url: 'https://a.example' }, { signal: undefined })
       assert.equal(calls.length, 1, 'exactly one upstream call')
       assert.equal(calls[0].url, 'https://api.tavily.com/extract')
       assert.deepEqual(calls[0].body.urls, ['https://a.example'], 'URL input must use the urls field')
@@ -163,7 +175,7 @@ test('host-contract: 文档提交后工具立刻读到新值（热更新真的�
     await host.settle()
     const tool = host.tools.get('web_fetch_tavily')
     // 初始禁用 → 明确报错
-    await assert.rejects(() => tool.execute({ query: 'https://a.example' }, undefined),
+    await assert.rejects(() => tool.execute({ url: 'https://a.example' }, undefined),
       (err) => err.message.includes('data source disabled'))
 
     // 模拟设置页保存：文档提交到宿主 provider
@@ -171,7 +183,7 @@ test('host-contract: 文档提交后工具立刻读到新值（热更新真的�
     const calls = []
     const restore = stubFetch(calls, SAMPLE)
     try {
-      const value = await tool.execute({ query: 'https://a.example' }, undefined)
+      const value = await tool.execute({ url: 'https://a.example' }, undefined)
       assert.equal(calls.length, 1, 'live source must win over the apply-time snapshot')
       assert.equal(calls[0].body.api_key, 'k-live', 'the newly saved key must be sent')
       assert.equal(value.sources.length, 1)

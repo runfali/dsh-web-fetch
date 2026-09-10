@@ -22,6 +22,19 @@ DeepSeek Harness's `ctx.web.registerSearchProvider` throws `WEB_PROVIDER_AMBIGUO
 
 Both can be **independently enabled/disabled** — disabled tools are hidden from the LLM entirely.
 
+**Parameters (identical for both tools):**
+
+| Parameter | Required | Type | Meaning |
+|---|---|---|---|
+| `url` | yes | string | The page URL to fetch (scheme optional, e.g. `https://example.com/page` or `example.com`) |
+| `maxResults` | no | number | Max results to return — Tavily only, default 5 |
+
+> **Renamed in `v0.1.5-rc.1`:** this parameter used to be named `query`.
+> That name collided with Tavily's own `/extract` request field `query` (a *search term*), and it
+> invited callers to pass a search topic where a URL was required. It is now `url`.
+> The old name is deliberately **not** accepted as an alias — it fails loudly with
+> `invalid arguments: missing required property "url"`, which is itself the migration hint.
+
 ## Features
 
 - **Dual pluggable strategies** — CDP + Tavily out of the box, add a new one with 1 file + 1 line

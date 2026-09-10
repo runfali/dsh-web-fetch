@@ -52,7 +52,7 @@ async function run() {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [] })
     let threw = false
-    try { await s.fetch({ query: "x" }) } catch { threw = true }
+    try { await s.fetch({ url: "x" }) } catch { threw = true }
     clean()
     assert.equal(threw, true)
     console.log("  ✓ 空 results 时报错")
@@ -61,7 +61,7 @@ async function run() {
   {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [ { url: "https://a.com", title: " A ", rawData: [RAW], content: "" } ] })
-    const r = await s.fetch({ query: "https://a.com" })
+    const r = await s.fetch({ url: "https://a.com" })
     clean()
     assert.equal(r.sources.length, 1)
     assert.equal(r.sources[0].url, "https://a.com")
@@ -78,13 +78,13 @@ async function run() {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [ { url: "https://a.com", title: "A", content: "c" } ] })
     lastBody = null
-    await s.fetch({ query: "https://a.com", maxResults: 12 })
+    await s.fetch({ url: "https://a.com", maxResults: 12 })
     clean()
     assert.equal(lastBody.maxResults, 12, "maxResults 应透传请求体")
     console.log("  ✓ maxResults 透传")
     const clean2 = stubFetch({ results: [ { url: "https://a.com", title: "A", content: "c" } ] })
     lastBody = null
-    await s.fetch({ query: "https://a.com" })
+    await s.fetch({ url: "https://a.com" })
     clean2()
     assert.equal(lastBody.maxResults, 5, "缺省 maxResults 回退 5")
     console.log("  ✓ maxResults 缺省 5")
@@ -93,19 +93,19 @@ async function run() {
   {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [ { url: "https://b.com", title: "B", content: "content only" } ] })
-    const r = await s.fetch({ query: "some topic" })
+    const r = await s.fetch({ url: "some topic" })
     clean()
     assert.equal(r.sources[0].url, "https://b.com")
     assert.equal(r.sources[0].title, "B")
     assert.ok(r.sources[0].content.includes("content only"))
-    console.log("  ✓ 自然语言 query + content 字段回退")
+    console.log("  ✓ 非 URL 入参（Tavily 回退出 query 字段）+ content 字段回退")
   }
 
   {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [ { url: "not-a-url", title: "bad" } ] })
     let threw = false
-    try { await s.fetch({ query: "x" }) } catch { threw = true }
+    try { await s.fetch({ url: "x" }) } catch { threw = true }
     clean()
     assert.equal(threw, true)
     console.log("  ✓ 缺少合法 url 的条目被跳过，最终报错")
@@ -116,7 +116,7 @@ async function run() {
     globalThis.fetch = async () => ({ ok: false, status: 403, json: async () => ({ message: "forbidden" }) })
     const s = makeTavilyStrategy({ apiKey: "bad" })
     let msg
-    try { await s.fetch({ query: "x" }) } catch (e) { msg = String(e.message) }
+    try { await s.fetch({ url: "x" }) } catch (e) { msg = String(e.message) }
     globalThis.fetch = real
     assert.ok(msg.includes("HTTP 403"))
     assert.ok(msg.includes("forbidden"))
@@ -128,7 +128,7 @@ async function run() {
     // 旧实现直接 item.url → TypeError: Cannot read properties of null，可用结果被一起葬送。
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: [ null, "junk", 42, { url: "https://ok.com", content: "good" } ] })
-    const r = await s.fetch({ query: "https://ok.com" })
+    const r = await s.fetch({ url: "https://ok.com" })
     clean()
     assert.equal(r.sources.length, 1, "非对象元素应被跳过，合法条目照常返回")
     assert.equal(r.sources[0].url, "https://ok.com")
@@ -141,7 +141,7 @@ async function run() {
     const s = makeTavilyStrategy({ apiKey: "k123" })
     const clean = stubFetch({ results: null })
     let msg
-    try { await s.fetch({ query: "x" }); assert.fail("should throw") } catch (e) { msg = String(e.message) }
+    try { await s.fetch({ url: "x" }); assert.fail("should throw") } catch (e) { msg = String(e.message) }
     clean()
     assert.ok(msg.includes("no results"), "应为明确的无结果错误，实际: " + msg)
     console.log("  ✓ results 为 null 时报「无结果」而非崩溃")
@@ -149,8 +149,8 @@ async function run() {
 
   {
     const s = makeTavilyStrategy({ apiKey: "k123" })
-    try { await s.fetch({ query: "" }); assert.fail("should throw") } catch {}
-    console.log("  ✓ 空 query 时报错")
+    try { await s.fetch({ url: "" }); assert.fail("should throw") } catch {}
+    console.log("  ✓ 空 url 时报错")
   }
 
   console.log("========================================")

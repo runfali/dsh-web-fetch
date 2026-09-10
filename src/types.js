@@ -8,7 +8,7 @@
 /**
  * 一次内容获取请求。
  * @typedef {Object} FetchRequest
- * @property {string} query - URL（CDP 模式）或自然语言问题（Tavily 模式）。
+ * @property {string} url - 目标页面 URL（工具层只接受 URL，搜索请走 web_search）。
  * @property {string} [provider] - 调用方显式要求的 provider id，例如 'cdp' / 'tavily'。
  * @property {object} [metadata] - 可选元信息（保留给未来扩展）。
  */
