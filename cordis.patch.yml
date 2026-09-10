@@ -1,13 +1,13 @@
 # dsh-web-fetch bundle patch
 #
 # 安装（标准 bundle 插件，不改 dsh 源码）：
-#   dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
+#   dsh plugin --profile web add dsh-web-fetch   # or: add /path/to/this/checkout
 # 卸载：
 #   dsh plugin --profile web remove dsh-web-fetch
 # 安装/卸载后重启 dsh 生效。
 #
-# 本补丁只挂载本插件的 provider 行（cordis id: web-fetch），
-# 默认启用 CDP（http://10.200.0.5:9222），默认禁用 Tavily
+# 本补丁只挂载本插件自己的行（cordis id: web-fetch）。
+# 默认启用 CDP（示例端点见下，按你的实际浏览器地址改），默认禁用 Tavily
 # （需在 Settings 页填 API Key）。
 #
 # 本插件不再通过 ctx.web.registerSearchProvider 注册；每个数据源
@@ -19,7 +19,7 @@
 #   - id: web-fetch
 #     config:
 #       cdpEnabled: true
-#       cdpEndpoint: http://10.200.0.5:9222
+#       cdpEndpoint: 'http://10.200.0.5:9222'
 #       cdpTimeoutMs: 60000
 #       cdpWaitMs: 2000
 #       tavilyEnabled: false
