@@ -16,7 +16,7 @@
 ## 设计目标
 
 - **零依赖**：除 DSH 平台自带包（`@deepseek-ai/dsh-settings`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/schemastery`）外无任何第三方库；
-- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（`settings.installSection`（dsh ≥ 0.1.2-alpha）、`ctx.tools.register`、`ctx.systemPrompt.section`）实现；
+- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（`settings.installSection`（dsh ≥ 0.1.2-alpha）、`ctx.tools.register`）实现；
 - **可扩展**：每个数据源是一个**独立的策略实现**（`src/strategies/*.js`），遵循统一的 `FetchStrategy` 契约；新增数据源只需添加一个新策略文件并在入口 `src/index.js` 追加一行 `ctx.tools.register(makeToolDef(...))`——核心路由与入口无需改动。
 
 ## 为什么不用 ctx.web.registerSearchProvider
@@ -28,7 +28,7 @@ DSH 的 web seam 在同一能力（search / fetch）下注册**多个 provider**
 | 工具 | 何时使用 |
 | --- | --- |
 | `web_fetch_cdp` | 需要 JavaScript 渲染、动态交互页面、直接 URL 抓取 |
-| `web_fetch_tavily` | 快速内容提取、不需要浏览器、自然语言主题 |
+| `web_fetch_tavily` | 快速提取已知 URL 的内容，不需要浏览器（不搜索，先用 web_search 找页面） |
 
 ## 架构概览
 
@@ -50,7 +50,10 @@ dsh-web-fetch/
 |-- lib/
 |   `-- client.js                 # 浏览器端 Settings 配置卡片（React + locale）
 `-- tests/
+|   |-- entry.test.mjs           # 入口/声明/engines/键集合一致性守护
+|   |-- host-integration.test.mjs # 真宿主对象契约测试
 |   |-- test-cdp-unit.mjs         # CDP 策略单元测试（纯本地）
+|   |-- test-cdp-frames.mjs       # WebSocket 帧编解码测试
 `-- test-tavily-unit.mjs      # Tavily 策略单元测试（纯本地）
 ```
 
@@ -60,11 +63,11 @@ dsh-web-fetch/
 
 ```bash
 # 1. 拉取代码后，先安装依赖（DSH loader 只在插件本地目录解析依赖）
-cd /data/dsh-workspace/dsh-web-fetch
+git clone https://github.com/runfali/dsh-web-fetch.git && cd dsh-web-fetch
 pnpm install
 
 # 2. 注册插件到 DSH web profile
-dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
+dsh plugin --profile web add ./dsh-web-fetch
 
 # 3. 重启 DSH 生效
 # （systemd 服务下执行：sudo systemctl restart dsh）
@@ -78,7 +81,7 @@ dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
 
 ```bash
 # 从本地路径安装
-dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
+dsh plugin --profile web add ./dsh-web-fetch
 
 # 已发布包名时只需包名
 dsh plugin --profile web add dsh-web-fetch
@@ -147,7 +150,8 @@ export function makeMyStrategy(config) {
 ```js
 import { makeMyStrategy } from "./strategies/my.js"
 // 在 apply() 中：
-ctx.tools.register(makeToolDef("my", makeMyStrategy, "myEnabled", current))
+// 必须传 thunk：传 current 本身是「快照」，setSource 之后的更新到不了 execute 端
+ctx.tools.register(makeToolDef("my", makeMyStrategy, "myEnabled", () => current()))
 ```
 
 3. （可选）在 `Config` 添加对应字段，在 `lib/client.js` 的 `FIELD_VIEWS` 添加对应视图行。
@@ -155,17 +159,20 @@ ctx.tools.register(makeToolDef("my", makeMyStrategy, "myEnabled", current))
 ## 测试
 
 ```bash
-node tests/test-cdp-unit.mjs
-node tests/test-tavily-unit.mjs
+pnpm test          # 全套
+pnpm test:host     # 只跑真宿主契约测试
 ```
 
-测试全部使用纯本地模拟（不连接真实浏览器、不发真实 API 请求）：
+测试全部离线（不连接真实浏览器、不发真实 API 请求）：
 
+- **entry.test.mjs** — 11 项：真实入口加载 + 声明面 + engines 判定表（含反证与宿主真实 `semver.satisfies` 交叉验证）+ 四处配置键集合一致性 + 依赖卫生；
+- **host-integration.test.mjs** — 5 项：用**真宿主对象**（`@deepseek-ai/cordis` + `dsh-tools` 真 `ToolRuntime` + `dsh-system-prompt` + `dsh-settings-file`）驱动插件，覆盖真实注册表、真 schema 校验、端到端 execute、设置热更新活引用；依赖不可解析时显式 skip（不假绿）；
 - **test-cdp-unit.mjs** — 21 项：helpers（8）+ CDP 策略工厂（5）+ Router（8）；
-- **test-tavily-unit.mjs** — 9 项：Tavily 策略的可用性、解析、错误路径。
+- **test-cdp-frames.mjs** — 5 项：RFC6455 帧编解码与边界；
+- **test-tavily-unit.mjs** — 13 项：Tavily 策略的可用性、解析、错误路径、病态载荷。
 
 ## 限制
 
 - `tavilyApiKey` 作为普通设置字段保存到 `~/.dsh/settings.yaml`，不经过凭据系统；敏感环境建议在 profile 用户层显式覆盖；
 - CDP 依赖节点原生 `http` 模块手工实现 WebSocket，未使用第三方的 `ws` 库；未启用 `permessage-deflate` 压缩（仅发送协商头，服务端如回传压缩帧则本插件会忽略 continuation 帧，当前 cloakbrowser 默认不启用压缩因此兼容）；
-- DSH 版本与 `@deepseek-ai/dsh-settings` / `@deepseek-ai/dsh-tools` / `@deepseek-ai/schemastery` 的版本兼容请参考 DSH 官方文档。
+- DSH 版本兼容：`>=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6`（已在 0.1.2-rc.1 与 0.1.5-rc.1 实测）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh`。

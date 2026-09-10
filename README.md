@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](package.json)
 [![DSH Plugin](https://img.shields.io/badge/DSH-Web%20Profile-7c3aed)](https://github.com/deepseek-ai/dsh)
-[![Version](https://img.shields.io/badge/version-0.2.0-orange)](package.json)
+[![Version](https://img.shields.io/badge/version-0.1.5--rc.1-orange)](package.json)
 
 **English** | [中文](README.zh-CN.md)
 
@@ -18,7 +18,7 @@ DeepSeek Harness's `ctx.web.registerSearchProvider` throws `WEB_PROVIDER_AMBIGUO
 | Tool | When the LLM should use it | What it does |
 |------|-----------------------------|--------------|
 | `web_fetch_cdp` | JS-heavy pages, SPAs, sites requiring real rendering | Connects to a remote Chrome via CDP (`cloakbrowser`) and returns rendered content |
-| `web_fetch_tavily` | Fast extraction, no browser needed, natural-language topics | Calls Tavily Extract API |
+| `web_fetch_tavily` | Fast extraction of a known URL, no browser needed | Calls Tavily Extract API (URLs only — use `web_search` to find pages first) |
 
 Both can be **independently enabled/disabled** — disabled tools are hidden from the LLM entirely.
 
@@ -45,8 +45,11 @@ dsh-web-fetch/
 │       └── tavily.js       # Tavily Extract API
 ├── lib/client.js           # Settings card (React + locale zh/en)
 └── tests/
-    ├── test-cdp-unit.mjs   # 21 tests (helpers 8 + factory 5 + router 8)
-    └── test-tavily-unit.mjs # 9 tests
+    ├── entry.test.mjs           # host entry + manifest + engines table + key parity
+    ├── host-integration.test.mjs # real Cordis + ToolRuntime + file settings provider
+    ├── test-cdp-unit.mjs        # 21 tests (helpers 8 + factory 5 + router 8)
+    ├── test-cdp-frames.mjs      # 5 tests (RFC6455 frame encode/decode)
+    └── test-tavily-unit.mjs     # 13 tests (availability, parsing, error paths, malformed payloads)
 ```
 
 **Strategy contract** (`src/types.js`):
@@ -71,10 +74,10 @@ export function makeMyStrategy(config) {
 
 ```bash
 # from source
-cd /data/dsh-workspace/dsh-web-fetch
+git clone https://github.com/runfali/dsh-web-fetch.git && cd dsh-web-fetch
 pnpm install          # DSH loader resolves deps from plugin dir, not host
 
-dsh plugin --profile web add /data/dsh-workspace/dsh-web-fetch
+dsh plugin --profile web add ./dsh-web-fetch
 # or after publishing:
 # dsh plugin --profile web add dsh-web-fetch
 
@@ -151,18 +154,36 @@ No changes to router or core logic needed.
 ## Development
 
 ```bash
-node tests/test-cdp-unit.mjs
-node tests/test-tavily-unit.mjs
-# All tests are offline (no real browser / no real Tavily call)
+pnpm test          # full suite
+pnpm test:host     # real-host contract tests only
 ```
 
-**Requirements:** Node.js >= 22, DSH `>=0.1.0-rc.7`
+All tests are offline (no real browser, no real Tavily call). `tests/host-integration.test.mjs`
+drives the plugin on the **real** dsh objects (`@deepseek-ai/cordis`, `dsh-tools`,
+`dsh-system-prompt`, `dsh-settings-file`) rather than hand-rolled stubs, and skips loudly
+when those packages are unresolvable.
+
+## Requirements
+
+| Item | Value |
+|---|---|
+| DeepSeek Harness | `>=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6` (verified on 0.1.2-rc.1 and 0.1.5-rc.1) |
+| Node.js | `>=22` |
+| Runtime dependencies | **none** — the three deps come from the dsh host install |
+
+> **Why the disjunction?** npm semver satisfies a prerelease only from a range group that
+> itself carries a prerelease with the same `[major, minor, patch]` tuple. The previous
+> single `>=0.1.2-alpha.3 <0.2.0` group therefore did **not** cover `0.1.5-rc.1` —
+> "claims 0.1.5 support but fails its own claim". The same trap applies to every
+> dependency range on a dsh package. `tests/entry.test.mjs` pins this with a 10-row
+> decision table, a counter-proof against the old range, and a line-by-line cross-check
+> against the host's real `semver.satisfies`.
 
 ## Limitations & Notes
 
 - `tavilyApiKey` is stored as plain text in `~/.dsh/settings.yaml` (settings system, not credential vault). For sensitive envs, override via profile `cordis.patch.yml`.
 - CDP uses Node's native `http` + hand-rolled WebSocket frames (no `ws` dep). `permessage-deflate` is not used — compatible with `cloakbrowser` default (compression off).
-- Version compatibility follows `@deepseek-ai/dsh-settings` / `dsh-tools` / `schemastery`.
+- Version compatibility: see the Requirements table above (machine-readable in `package.json` under `dsh.engines.dsh`).
 
 ## Contributing
 
