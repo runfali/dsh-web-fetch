@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](package.json)
 [![DSH Plugin](https://img.shields.io/badge/DSH-Web%20Profile-7c3aed)](https://github.com/deepseek-ai/dsh)
-[![Version](https://img.shields.io/badge/version-0.1.5--rc.1-orange)](package.json)
+[![Version](https://img.shields.io/badge/version-0.1.7--rc.1-orange)](package.json)
 
 **English** | [中文](README.zh-CN.md)
 
@@ -38,7 +38,7 @@ Both can be **independently enabled/disabled** — disabled tools are hidden fro
 ## Features
 
 - **Dual pluggable strategies** — CDP + Tavily out of the box, add a new one with 1 file + 1 line
-- **Zero-intrusion** — Cordis bundle plugin, no DSH core patch. All via `ctx.tools.register` / `settings.installSection` (dsh ≥ 0.1.2-alpha)
+- **Zero-intrusion** — Cordis bundle plugin, no DSH core patch. All via `ctx.tools.register` plus an exported **volatile** `Config` schema (dsh ≥ 0.1.7: the settings namespace *is* the cordis row id, and edits apply live — `installSection`/`settingsScope` no longer exist)
 - **Zero extra deps** — only `@deepseek-ai/dsh-settings`, `@deepseek-ai/dsh-tools`, `@deepseek-ai/schemastery`
 - **Live config** — settings UI card + `~/.dsh/settings.yaml` hot-reload, no restart needed
 - **Concurrency-safe** — `isConcurrencySafe: true`, supports `AbortSignal`
@@ -56,7 +56,7 @@ dsh-web-fetch/
 │   └── strategies/
 │       ├── cdp.js          # CDP: raw http + manual WS frames, no `ws` dep
 │       └── tavily.js       # Tavily Extract API
-├── lib/client.js           # Settings card (React + locale zh/en)
+├── lib/client.js           # Plugins-page settings card (React + locale zh/en)
 └── tests/
     ├── entry.test.mjs           # host entry + manifest + engines table + key parity
     ├── host-integration.test.mjs # real Cordis + ToolRuntime + file settings provider
@@ -103,13 +103,13 @@ dsh plugin --profile web add ./dsh-web-fetch
 
 ### 2. Configure (UI recommended)
 
-Open **Settings → Plugin Config → 通用 Web 内容获取（web-fetch）**
+Open the Web UI's **Plugins → 通用 Web 内容获取（web-fetch）**
 
 - **Enable toggles** — `CDP` / `Tavily` checkboxes at the top
 - **CDP group** — `CDP Endpoint` (default `http://10.200.0.5:9222`), `Timeout ms` (60000), `Extra wait after load ms` (2000)
 - **Tavily group** — `Endpoint` (`https://api.tavily.com/extract`), `API Key` (leave empty to disable), `Timeout ms` (30000)
 
-Saved to `~/.dsh/settings.yaml` under `web-fetch:` and hot-reloaded.
+Saving writes the `web-fetch` entry of the profile patch and applies **live** (the fields are declared `volatile`, so no restart and no fiber remount).
 
 <details>
 <summary>YAML (profile override) — click to expand</summary>
@@ -181,7 +181,7 @@ when those packages are unresolvable.
 
 | Item | Value |
 |---|---|
-| DeepSeek Harness | `>=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6` (verified on 0.1.2-rc.1 and 0.1.5-rc.1) |
+| DeepSeek Harness | `>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8` (contract-verified on 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.7-rc.1) |
 | Node.js | `>=22` |
 | Runtime dependencies | **none** — the three deps come from the dsh host install |
 
@@ -189,13 +189,13 @@ when those packages are unresolvable.
 > itself carries a prerelease with the same `[major, minor, patch]` tuple. The previous
 > single `>=0.1.2-alpha.3 <0.2.0` group therefore did **not** cover `0.1.5-rc.1` —
 > "claims 0.1.5 support but fails its own claim". The same trap applies to every
-> dependency range on a dsh package. `tests/entry.test.mjs` pins this with a 10-row
+> dependency range on a dsh package. `tests/entry.test.mjs` pins this with a 13-row
 > decision table, a counter-proof against the old range, and a line-by-line cross-check
 > against the host's real `semver.satisfies`.
 
 ## Limitations & Notes
 
-- `tavilyApiKey` is stored as plain text in `~/.dsh/settings.yaml` (settings system, not credential vault). For sensitive envs, override via profile `cordis.patch.yml`.
+- `tavilyApiKey` is stored as plain text in the settings document (settings system, not credential vault). For sensitive envs, override via profile `cordis.patch.yml`.
 - CDP uses Node's native `http` + hand-rolled WebSocket frames (no `ws` dep). `permessage-deflate` is not used — compatible with `cloakbrowser` default (compression off).
 - Version compatibility: see the Requirements table above (machine-readable in `package.json` under `dsh.engines.dsh`).
 

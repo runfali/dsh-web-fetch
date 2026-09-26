@@ -5,8 +5,7 @@
  *   - 零依赖：除 DSH 平台自带包（@deepseek-ai/schemastery、
  *     @deepseek-ai/dsh-settings）外不引入任何第三方库；
  *   - 零侵入：不改 dsh 核心源码；所有逻辑、路由、设置页卡片
- *     均通过 Cordis 插件 API（installSettingsSection、
- *     ctx.tools.register）实现；
+ *     均通过 Cordis 插件 API（导出的 volatile Config + ctx.tools.register）实现；
  *   - 可扩展：每个数据源是一个独立的策略实现（src/strategies/*.js），
  *     且各自注册为**独立工具**——LLM 根据工具描述自主决策用哪一个，
  *     而不是由死规则决定。
@@ -23,29 +22,58 @@
  */
 import z from "@deepseek-ai/schemastery"
 import { defineTool } from "@deepseek-ai/dsh-tools"
-// dsh 0.1.2-alpha.3：installSettingsSection/settingsNamespace 已从 dsh-settings 移除，
-// 设置接线改用 provider 方法 settings.installSection(owner, ns, schema, entry, hooks)。
+// dsh 0.1.7-rc.1：installSettingsSection / installSection / settingsNamespace 均已从
+// dsh-settings 移除。命名空间改为「cordis 行 id + 导出的 Config schema」，可热编辑
+// 字段必须 .volatile()（volatile-only 变更经 configEditor 原地提交，不重启 fiber）。
 import { makeCdpStrategy } from "./strategies/cdp.js"
 import { makeTavilyStrategy } from "./strategies/tavily.js"
 
 export const name = "web-fetch"
-/** dsh 0.1.2-alpha 起 settingsNamespace() brand 辅助已移除；
- * 命名空间在 settings.register/installSection 处校验（小写连字符标识符）。 */
+/** 设置命名空间 = 本插件在 cordis 组合树里的行 id（dsh 0.1.7 起宿主按行 id 命名，
+ * 插件侧不再有 brand 辅助声明）；也是设置卡与 profile patch 引用的键名。 */
 export const SETTINGS_NS = "web-fetch"
 
 /**
  * 设置命名空间的字段模式。每个策略一段独立字段，可视化界面按策略分组。
+ *
+ * 0.1.7 契约（对照 dsh-settings/lib/index.js 源码）：
+ *   - Config 必须从模块导出（cordis fiber.runtime.Config）；未导出 = describe() 枚举
+ *     不到本命名空间 = 插件页无配置入口（只见启用/停用行）；
+ *   - describe() 只收录 volatileForm(schema) 非空的入口，write() 逐路径校验
+ *     isVolatilePath —— 可热编辑字段必须 .volatile()，否则设置页写不进去；
+ *   - volatile 字段经 apply 收到 cosmokit 活引用 {get()}，非 volatile 是裸值。
  */
 export const Config = z.object({
-  cdpEnabled: z.boolean().default(true),
-  cdpEndpoint: z.string().default("http://10.200.0.5:9222"),
-  cdpTimeoutMs: z.number().min(1000).default(60000),
-  cdpWaitMs: z.number().min(0).default(2000),
-  tavilyEnabled: z.boolean().default(false),
-  tavilyEndpoint: z.string().default("https://api.tavily.com/extract"),
-  tavilyApiKey: z.string().default(""),
-  tavilyTimeoutMs: z.number().min(1000).default(30000),
+  cdpEnabled: z.boolean().default(true).volatile(),
+  cdpEndpoint: z.string().default("http://10.200.0.5:9222").volatile(),
+  cdpTimeoutMs: z.number().min(1000).default(60000).volatile(),
+  cdpWaitMs: z.number().min(0).default(2000).volatile(),
+  tavilyEnabled: z.boolean().default(false).volatile(),
+  tavilyEndpoint: z.string().default("https://api.tavily.com/extract").volatile(),
+  tavilyApiKey: z.string().default("").volatile(),
+  tavilyTimeoutMs: z.number().min(1000).default(30000).volatile(),
 })
+
+/** 读取单个配置字段：0.1.7 起 volatile 字段是 {get()} 活引用，普通字段是裸值。
+ * 两种宿主形状都兼容（旧宿主传裸值 → 原样透传）。 */
+export function readField(value) {
+  if (value !== null && typeof value === "object" && typeof value.get === "function" && !Array.isArray(value)) {
+    return value.get()
+  }
+  return value
+}
+
+/** 把一行配置物化为普通值对象：策略工厂与启用判定只该看到裸值。
+ * 键集合沿用配置行自身（schema 之外的残留键一并透传，策略工厂自会忽略）。 */
+function materializeConfig(row) {
+  const out = {}
+  const source = row === null || row === undefined ? {} : row
+  for (const key of Object.keys(source)) {
+    if (key === "__jsExpr") continue
+    out[key] = readField(source[key])
+  }
+  return out
+}
 
 /** 从策略 fetch 的返回（{sources, truncated}）投影为工具输出。 */
 function projectResult(result) {
@@ -128,6 +156,7 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
     },
     isConcurrencySafe: () => true,
     async execute(args, exec) {
+      // configReader 每次现取并解引用 volatile 活引用：设置页一保存即生效
       let cfg = configReader()
       let enabled = cfg[enabledField] === true
       if (!enabled && cfg[enabledField] !== false) {
@@ -137,7 +166,7 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
       if (!enabled) {
         const cur = (() => { try { return JSON.stringify({ [enabledField]: cfg[enabledField], cdpEnabled: cfg.cdpEnabled, tavilyEnabled: cfg.tavilyEnabled }) } catch { return String(cfg[enabledField]) } })()
         throw new Error(
-          "web-fetch (" + strategyId + "): data source disabled in settings (current " + cur + "). Enable it in Settings → Plugin Config → " + name + " (or set web-fetch." + enabledField + ": true in ~/.dsh/settings.yaml) and wait 1s for hot-reload."
+          "web-fetch (" + strategyId + "): data source disabled (current " + cur + "). Enable it on the Plugins page → 通用 Web 内容获取（" + name + "）, or set " + SETTINGS_NS + "." + enabledField + ": true in the profile cordis patch; the form applies live, the patch needs a restart."
         )
       }
       const strategy = factory(cfg)
@@ -148,7 +177,7 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
           : strategyId === "cdp" && !cfg.cdpEndpoint
           ? " (cdpEndpoint is empty)"
           : ""
-        throw new Error("web-fetch (" + strategyId + "): data source unavailable — strategy.available() returned false" + hint + ". Check configuration in Settings → Plugin Config → " + name + ".")
+        throw new Error("web-fetch (" + strategyId + "): data source unavailable — strategy.available() returned false" + hint + ". Check the configuration on the Plugins page → 通用 Web 内容获取（" + name + ").")
       }
       try {
         const result = await strategy.fetch({
@@ -164,30 +193,27 @@ function makeToolDef(strategyId, factory, enabledField, configReader) {
 }
 
 /**
- * Cordis apply：注册设置命名空间，并为每个策略注册一个独立工具。
+ * Cordis apply：注册展示策略，并为每个策略注册一个独立工具。
  * @param {object} ctx - cordis 上下文。
- * @param {object} config - web-fetch 行配置（作为设置的 composition base）。
+ * @param {object} config - web-fetch 行配置；0.1.7 起 volatile 字段是 {get()} 活引用。
  */
 export function apply(ctx, config = {}) {
-  let current = () => config
-  // dsh 0.1.2-alpha.3：独立 installSettingsSection 帮助函数已从 dsh-settings 移除，
-  // 同样的接线改为 provider 上的 settings.installSection(owner, ns, schema, entry, hooks)
-  // （宿主源码级核对：register(base=entry) → setSource(scope.get) → 卸载回落 effect →
-  // onChange() 同步首发 → scope.watch 持续通知）。settings 晚于本插件 apply 时到达，
-  // 工具 execute 里的 current() 闭包天然兼容晚接线。
+  // 0.1.7 不再有 installSection：Config 声明本身就是设置命名空间（ns = 行 id）。
+  // 这里只注册 {auto:false} 展示策略，关掉宿主按 schema 自动生成的默认页——
+  // 配置卡由 client 半注册进插件页 plugins.item 槽位（与官方插件一致）。
+  // 等待式注入：settings 服务晚于本插件到达时回调才执行；加载期无副作用（幂等）。
   ctx.inject(["settings"], (sctx) => {
-    sctx.settings.installSection(ctx, SETTINGS_NS, Config, config, {
-      setSource: (source) => { current = source },
-      onChange: () => {}
-    })
+    sctx.effect(() => sctx.settings.configure({ auto: false }, ctx.fiber))
   })
 
-  // 为每个策略注册独立工具；只有 enabled 的策略在 execute 中才真正可用
-  // 注意：不能直接传 current（参数传值是快照，setSource 之后的更新到不了 execute 端）；
-  // 须传包装 thunk 每次现取 current()，保持对变量的活引用。
-  ctx.tools.register(makeToolDef("cdp", makeCdpStrategy, "cdpEnabled", () => current()))
-  ctx.tools.register(makeToolDef("tavily", makeTavilyStrategy, "tavilyEnabled", () => current()))
+  // 每次 execute 现取配置行并解引用 volatile 活引用（设置页保存即时生效）。
+  const readConfig = () => materializeConfig(config)
+
+  // 为每个策略注册独立工具；只有 enabled 的策略在 execute 中才真正可用。
+  // 传 thunk 而非值：快照会在设置页保存后过期，thunk 每次现读。
+  ctx.tools.register(makeToolDef("cdp", makeCdpStrategy, "cdpEnabled", readConfig))
+  ctx.tools.register(makeToolDef("tavily", makeTavilyStrategy, "tavilyEnabled", readConfig))
 }
 
-/** Cordis 注入项。 */
-export const inject = ["tools", "settings"]
+/** Cordis 注入项：tools 是硬依赖（注册工具）；settings 走 apply 内等待式注入。 */
+export const inject = ["tools"]

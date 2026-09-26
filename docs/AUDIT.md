@@ -123,3 +123,74 @@
 - **WebSocket 长连接未打真服务器**：帧层只做 round-trip，未验证真实 cloakbrowser 的分片行为。
 - `docs/` 属内部审计资料，未进 `package.json` 的 `files`，不随包发布。
 
+---
+
+# 第三轮：dsh 0.1.7-rc.1 适配（2026-09-26）
+
+> 触发：宿主升级到 0.1.7-rc.1，web-fetch 仍停在 0.1.5 契约。
+> 方法：先证改动面再动代码；结论全部来自本机安装副本的源码级对照，见 [DSH-0.1.7-ADAPTATION.md](DSH-0.1.7-ADAPTATION.md)。
+
+## 一、总体结论
+
+**业务逻辑零改动**；破坏面全在设置接线——0.1.5 的四条老契约在 0.1.7 全部被移除或改形。
+不修的后果是标准三连静默：host 侧 `installSection` 不存在 → 崩；client 侧 `settingsScope` 不存在 → 崩；
+槽位 key 不存在 → 卡片不出现。按 dsh-plugin-audit 分级属 P0（装不生效/必崩）。
+
+## 二、修复清单（P0 × 5）
+
+| # | 缺陷 | 修法 |
+|---|---|---|
+| P0-1 | host 调已删除的 `settings.installSection` | 删接线；命名空间改由导出 Config + 行 id 成立 |
+| P0-2 | Config 八字段非 volatile → 设置页写入被 `isVolatilePath` 拒 | 全部 `.volatile()` + `readField()` 解引用 |
+| P0-3 | client 用已删除的 `ctx.settingsScope` | 改 `configForms.get(ns)` |
+| P0-4 | 卡注册在已删除的 `settings.plugin.item` / generator 形态回调 | 迁 `plugins.item`（list）+ 返回 disposer 的普通函数 + `whileServed` 门控 |
+| P0-5 | 未注册展示策略 → 宿主自动页与自研卡并存 | `settings.configure({auto:false})` |
+
+## 三、次级问题（P1/P2）
+
+| 级别 | 问题 | 处置 |
+|---|---|---|
+| P1 | 组件 `if (!state.available) return null`：命名空间未被服务时详情页一片空白（无任何解释） | 改渲染 `unavailable` 提示；hooks 调用前置到所有早退之前 |
+| P1 | 列表卡把整张表单渲进描述区（官方卡 summary 只返回一行字符串） | 加 `view === "summary"` 分支；根元素 `<li>` → `<div>` |
+| P2 | 客户端仅为取一个 chevron 图标依赖 `@deepseek-ai/dsh-client-ui-primitives` | 改文字 `▾`，bundle 的 require 面收窄到 react |
+| P2 | 禁用态报错指向 0.1.7 已不存在的「Settings → Plugin Config」入口 | 改插件页指引，并写明「表单即时生效 / patch 需重启」 |
+| P2 | `pnpm test` 用 `node --test`，本机沙箱下 `spawn EPERM` 整批假死 | 逐文件 `node <file>`（语义等价，不 spawn 并发子进程） |
+
+## 四、测试面（上轮 55+15 → 本轮 entry 14 + host 7 + cdp 21 + tavily 13 + frames 5 + client 19）
+
+- `host-integration` 的真宿主对象从「假 settings provider」升级为**真 `SettingsForms` 服务**（真 cordis `Context` + `provide` 出的 loader/profileContext/configEditor），直接验命名空间可见性与 volatile 写入面；并补两条反证：未导出 Config、无 volatile 字段的入口必须被 `describe()` 排除（证明判据非恒真）。
+- 六条反证逐条实跑变红（清单见适配说明第三节），每条留下报错原文。
+
+## 五、本轮审计角度的诚实缺口
+
+- 未做真机 E2E（未把插件装进 profile、未重启 dsh）——见适配说明第四节。
+- 未联网验证 Tavily / CDP 真实端点。
+- `tavilyApiKey` 是否升级为宿主 secret role，属行为变更，未在本轮决定。
+## 六、环境侧收尾（2026-09-26，发哥执行 `pnpm install` 后复盘）
+
+现象：安装成功，但装出来的是 `dsh-settings@0.1.5-rc.1` / `dsh-tools@0.1.5-rc.1`，
+导致 host-integration 里读**真 `SettingsForms`** 的那条守护变红：
+
+```
+AssertionError: describe() 必须枚举到 web-fetch（否则插件页没有配置入口）: []
+```
+
+这也是本轮守护的价值证明——0.1.5 的 `dsh-settings` 里 `installSection` 尚在、没有 0.1.7 的
+`volatileForm`/`describe` 语义，命名空间在真宿主上根本不可见（=「插件页没有配置项」那条 P1 的形态）。
+
+根因（两次修正后落定）：**peerDependencies 被 `autoInstallPeers` 自动安装**，宽区间解析到了 0.1.5-rc.1。
+首次归因写成「release-age 白名单没刷新」是**错的**：本机 `pnpm config list` 显示 `minimumReleaseAge` 并未设置，
+该闸门当前不生效（已更正 `pnpm-workspace.yaml` 里的注释，保留更正痕迹）。
+
+处置：
+
+1. `package.json` 的 `devDependencies` 精确钉版 `@deepseek-ai/dsh-settings` / `dsh-tools` /
+   `dsh-system-prompt` = 0.1.7-rc.1、schemastery = 3.18.4`（直接依赖优先于自动安装的 peer，避开区间解析）；
+   `peerDependencies` 保留宽区间——运行时装进 profile 的宿主仍按自己的版本判定兼容。
+2. `pnpm-workspace.yaml` 的 `allowBuilds` 占位字符串（pnpm 自动写入的
+   `set this to true or false`）落定为 `false`，消除每次 install 的 `ERR_PNPM_IGNORED_BUILDS` 收尾；
+   `minimumReleaseAgeExclude` 同步刷新到 0.1.7-rc.1 系（惯例动作，与本次根因无关）。
+
+纪律沉淀：**「本地测试全绿」必须先确认测试树与被测版本一致**。本次红/绿的分界不是代码行，而是 `node_modules` 里
+那个包的版本——同一份源码、同一套断言，装 0.1.5 就红、装 0.1.7 才绿。凡守护「宿主契约」的测试，
+其被测依赖版本必须显式钉在 `devDependencies` 里，不能靠区间 + 全局策略去碰运气。

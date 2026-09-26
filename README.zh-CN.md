@@ -28,7 +28,7 @@
 ## 设计目标
 
 - **零依赖**：除 DSH 平台自带包（`@deepseek-ai/dsh-settings`、`@deepseek-ai/dsh-tools`、`@deepseek-ai/schemastery`）外无任何第三方库；
-- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（`settings.installSection`（dsh ≥ 0.1.2-alpha）、`ctx.tools.register`）实现；
+- **零侵入**：不改 DSH 核心源码；所有逻辑、路由、配置界面均通过 Cordis 插件 API（导出的 **volatile** `Config` schema + `ctx.tools.register`）实现。dsh ≥ 0.1.7 起设置命名空间即 cordis 行 id，`installSection` / `settingsScope` 已从宿主移除；
 - **可扩展**：每个数据源是一个**独立的策略实现**（`src/strategies/*.js`），遵循统一的 `FetchStrategy` 契约；新增数据源只需添加一个新策略文件并在入口 `src/index.js` 追加一行 `ctx.tools.register(makeToolDef(...))`——核心路由与入口无需改动。
 
 ## 为什么不用 ctx.web.registerSearchProvider
@@ -60,7 +60,7 @@ dsh-web-fetch/
 |       |-- cdp.js                # CDP 浏览器策略（HTTP + 手工 WS + 页面抓取）
 |       `-- tavily.js             # Tavily Extract API 策略
 |-- lib/
-|   `-- client.js                 # 浏览器端 Settings 配置卡片（React + locale）
+|   `-- client.js                 # 浏览器端插件页配置卡片（React + locale）
 `-- tests/
 |   |-- entry.test.mjs           # 入口/声明/engines/键集合一致性守护
 |   |-- host-integration.test.mjs # 真宿主对象契约测试
@@ -109,7 +109,7 @@ dsh plugin --profile web remove dsh-web-fetch
 
 ### 可视化配置（推荐）
 
-安装后打开 Web UI 的 **设置 → 插件配置**，会看到「通用 Web 内容获取（web-fetch）」卡片，展开后可按组填写：
+安装后打开 Web UI 的 **插件** 页，点进「通用 Web 内容获取（web-fetch）」即可配置（dsh 0.1.7 起插件自带配置渲染在插件页详情里，不在「设置」页）：
 
 - **数据源启用开关**：顶部两个 checkbox 分别控制 CDP 与 Tavily 是否可用；
 - **CDP 浏览器组**
@@ -172,21 +172,22 @@ ctx.tools.register(makeToolDef("my", makeMyStrategy, "myEnabled", () => current(
 ## 测试
 
 ```bash
-pnpm test          # 全套
+pnpm test          # 全套（entry + host + cdp + tavily + frames + client）
 pnpm test:host     # 只跑真宿主契约测试
+pnpm test:client   # 只跑浏览器半结构/交互测试
 ```
 
 测试全部离线（不连接真实浏览器、不发真实 API 请求）：
 
-- **entry.test.mjs** — 11 项：真实入口加载 + 声明面 + engines 判定表（含反证与宿主真实 `semver.satisfies` 交叉验证）+ 四处配置键集合一致性 + 依赖卫生；
-- **host-integration.test.mjs** — 5 项：用**真宿主对象**（`@deepseek-ai/cordis` + `dsh-tools` 真 `ToolRuntime` + `dsh-system-prompt` + `dsh-settings-file`）驱动插件，覆盖真实注册表、真 schema 校验、端到端 execute、设置热更新活引用；依赖不可解析时显式 skip（不假绿）；
+- **entry.test.mjs** — 14 组：真实入口加载 + **0.1.7 设置契约**（Config 导出 / 八字段 volatile / `configure({auto:false})` / volatile 活引用热更新）+ 声明面 + engines 判定表 13 行（含反证与真实 `semver.satisfies` 交叉验证）+ 三处配置键集合一致性 + 依赖卫生；
+- **host-integration.test.mjs** — 7 组：用**真宿主对象**（`@deepseek-ai/cordis` 真 `Context`/`resolveConfig` + `dsh-tools` 真 `ToolRuntime` + `dsh-system-prompt` + `dsh-settings` 真 `SettingsForms`）驱动插件，覆盖真实注册表、真 schema 校验、端到端 execute，以及**真设置服务**上的命名空间可见性 / volatile 可写 / schema 外字段被拒 / 缺 Config 与无 volatile 入口被排除；依赖不可解析时显式 skip（不假绿）；
 - **test-cdp-unit.mjs** — 21 项：helpers（8）+ CDP 策略工厂（5）+ Router（8）；
 - **test-cdp-frames.mjs** — 5 项：RFC6455 帧编解码与边界；
 - **test-tavily-unit.mjs** — 13 项：Tavily 策略的可用性、解析、错误路径、病态载荷。
-- **client-smoke.mjs** — 15 项：浏览器半结构加载 + locale 键集合 + slot 注册契约 + **交互层盲区**（可写态控件不禁用 / 只读态全禁用含保存按钮 / 开关落 user 层 / 数字字段以 number 落盘 / 清空文本回落默认 / 非法输入置 invalid）。
+- **client-smoke.mjs** — 19 项：浏览器半结构加载（无 primitives 运行时依赖）+ locale 键集合互相覆盖 + `configForms`/`whileServed` 门控（未服务不注册）+ `plugins.item` 槽位契约 + **双视图**（summary 只给一行描述）+ 不可用态提示 + **交互层盲区**（可写态控件不禁用 / 只读态全禁用含保存按钮 / 开关落 user 层 / 数字字段以 number 落盘 / 清空文本回落默认 / 非法输入置 invalid）。
 
 ## 限制
 
-- `tavilyApiKey` 作为普通设置字段保存到 `~/.dsh/settings.yaml`，不经过凭据系统；敏感环境建议在 profile 用户层显式覆盖；
+- `tavilyApiKey` 作为普通设置字段保存在设置文档里（属设置系统，非凭据库）；敏感环境建议在 profile 用户层显式覆盖；
 - CDP 依赖节点原生 `http` 模块手工实现 WebSocket，未使用第三方的 `ws` 库；未启用 `permessage-deflate` 压缩（仅发送协商头，服务端如回传压缩帧则本插件会忽略 continuation 帧，当前 cloakbrowser 默认不启用压缩因此兼容）；
-- DSH 版本兼容：`>=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6`（已在 0.1.2-rc.1 与 0.1.5-rc.1 实测）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh`。
+- DSH 版本兼容：`>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8`（已在 0.1.2-rc.1、0.1.5-rc.1、0.1.7-rc.1 做过契约级对照）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1` / `0.1.7-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh` 与 `peerDependencies`。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-fetch",
-  "version": "0.1.5-rc.1",
+  "version": "0.1.7-rc.1",
   "description": "Generic Web content fetcher plugin for DeepSeek Harness with dual pluggable data sources (CDP browser + Tavily). Each data source is registered as its own tool so the LLM can pick context-appropriately. Zero-intrusion bundle plugin; follows strategy pattern.",
   "type": "module",
   "main": "src/index.js",
@@ -32,15 +32,16 @@
   "engines": {
     "node": ">=22"
   },
-  "dependencies": {
-    "@deepseek-ai/dsh-settings": ">=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6",
-    "@deepseek-ai/dsh-tools": ">=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6",
-    "@deepseek-ai/schemastery": "^3.18.2"
+  "devDependencies": {
+    "@deepseek-ai/dsh": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.7-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "0.1.7-rc.1",
+    "@deepseek-ai/schemastery": "3.18.4"
   },
-  "devDependencies": {},
   "dsh": {
     "engines": {
-      "dsh": ">=0.1.2-alpha.3 <0.2.0 || >=0.1.5-alpha.1 <0.1.6"
+      "dsh": ">=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8"
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -50,7 +51,20 @@
     }
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs tests/test-cdp-frames.mjs && node tests/test-cdp-unit.mjs && node tests/test-tavily-unit.mjs && node tests/client-smoke.mjs",
-    "test:host": "node --test tests/host-integration.test.mjs"
+    "test": "node tests/entry.test.mjs && node tests/host-integration.test.mjs && node tests/test-cdp-unit.mjs && node tests/test-tavily-unit.mjs && node tests/test-cdp-frames.mjs && node tests/client-smoke.mjs",
+    "test:entry": "node tests/entry.test.mjs",
+    "test:host": "node tests/host-integration.test.mjs",
+    "test:client": "node tests/client-smoke.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8",
+    "@deepseek-ai/dsh-settings": ">=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8",
+    "@deepseek-ai/dsh-tools": ">=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8",
+    "@deepseek-ai/schemastery": "~3.18.4",
+    "react": "^18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runfali/dsh-web-fetch.git"
   }
 }
