@@ -190,4 +190,22 @@ pnpm test:client   # 只跑浏览器半结构/交互测试
 
 - `tavilyApiKey` 作为普通设置字段保存在设置文档里（属设置系统，非凭据库）；敏感环境建议在 profile 用户层显式覆盖；
 - CDP 依赖节点原生 `http` 模块手工实现 WebSocket，未使用第三方的 `ws` 库；未启用 `permessage-deflate` 压缩（仅发送协商头，服务端如回传压缩帧则本插件会忽略 continuation 帧，当前 cloakbrowser 默认不启用压缩因此兼容）；
-- DSH 版本兼容：`>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8`（已在 0.1.2-rc.1、0.1.5-rc.1、0.1.7-rc.1 做过契约级对照）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1` / `0.1.7-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh` 与 `peerDependencies`。
+- DSH 版本兼容：`>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8 || >=0.2.0-alpha.0 <0.3.0`（已在 0.1.2-rc.1、0.1.5-rc.1、0.1.7-rc.1 做过契约级对照）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1` / `0.1.7-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh` 与 `peerDependencies`。
+
+## dsh 0.2.0-rc.1 适配结论
+
+对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.0-rc.1`）做了 asar 解包源码比对 +
+**真机闸实测**。要点：
+
+- **唯一必改项是兼容区间**：原区间在 0.2.0-rc.1 下被启动闸拒绝
+  （`dsh: skipping profile bundle ...`），插件**整个 bundle 不加载**（web 与 desktop 同时失效）。
+  追加 `|| >=0.2.0-alpha.0 <0.3.0` 后放行。
+- **闸只读 `peerDependencies`**：判定函数（`dsh-app-boot` 的
+  `evaluatePluginCompatibility`）只遍历 `peerDependencies` 里 `@deepseek-ai/dsh*` 的条目，
+  **从不读 `dsh.engines.dsh`**（全树 grep 零消费者）。两者必须逐字一致，测试已守护。
+- **两种 semver 模式**：宿主闸用 `includePrerelease: true`，此时「预发布可见性」规则被绕过，
+  于是**上界自身的预发布也被放行**（`<0.1.8` 放行 `0.1.8-rc.1`、`<0.3.0` 放行 `0.3.0-alpha.0`）；
+  严格模式（pnpm 安装期）会拒绝它们。所以上界拦的是**正式版**，不是预发布。
+  若要连预发布一起拒，上界须写成 `<0.3.0-0`。
+- **凭证细节**：详细取证、改动清单、测试结果与诚实缺口见 `docs/DSH-0.2.0-ADAPTATION.md`。
+
