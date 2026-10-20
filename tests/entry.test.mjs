@@ -153,7 +153,7 @@ ok('禁用态文案含字段名 + 当前值 + 插件页指引')
 // 2. 声明面
 // ---------------------------------------------------------------------------
 
-assert.equal(pkg.version, '0.2.0-rc.1', '版本号必须跟宿主发布号（家族惯例）')
+assert.equal(pkg.version, '0.2.1-rc.2', '版本号必须跟宿主发布号（家族惯例）')
 assert.equal(pkg.main, 'src/index.js')
 assert.equal(pkg.exports['.'], './src/index.js')
 assert.equal(pkg.exports['./client'], './lib/client.js')
@@ -162,7 +162,7 @@ assert.equal(pkg.dsh.client.platform, 'web')
 for (const f of ['src', 'lib', 'tests', 'cordis.patch.yml', 'README.md', 'LICENSE']) {
   assert.ok(pkg.files.includes(f), 'files must ship ' + f)
 }
-ok('manifest：version 0.2.0-rc.1 / exports / bundle patch / client 平台声明')
+ok('manifest：version 0.2.1-rc.2 / exports / bundle patch / client 平台声明')
 
 // ---------------------------------------------------------------------------
 // 3. engines 判定表（内置手写比较器，不引 semver 依赖）
@@ -192,8 +192,12 @@ function compare(a, b) {
   for (const key of ['major', 'minor', 'patch']) if (a[key] !== b[key]) return a[key] < b[key] ? -1 : 1
   return comparePrerelease(a.pre, b.pre)
 }
-/** npm semver 预发布规则的最小实现：只支持 '>=X.Y.Z[-pre] <A.B.C[-pre]' 的 '||' 组合。 */
-function satisfies(version, range) {
+/**
+ * npm semver 的最小实现：只支持 '>=X.Y.Z[-pre] <A.B.C[-pre]' 的 '||' 组合。
+ * hostMode=true 复刻宿主闸的 `includePrerelease: true` —— 预发布可见性规则被绕过，
+ * 退化成纯比较器（`<0.3.0` 因此会放行 `0.3.0-alpha.0`）。
+ */
+function satisfies(version, range, hostMode) {
   const v = parseVersion(version)
   if (v === undefined) return false
   return String(range).split('||').some((clause) => {
@@ -212,7 +216,7 @@ function satisfies(version, range) {
       if (bound.op === '>=' && order < 0) return false
       if (bound.op === '<' && order >= 0) return false
     }
-    if (v.pre.length > 0) {
+    if (!hostMode && v.pre.length > 0) {
       const anchored = bounds.some((bound) =>
         bound.version.major === v.major && bound.version.minor === v.minor && bound.version.patch === v.patch && bound.version.pre.length > 0)
       if (!anchored) return false
@@ -220,6 +224,7 @@ function satisfies(version, range) {
     return true
   })
 }
+const satisfiesHost = (version, range) => satisfies(version, range, true)
 
 const DECLARED = pkg.dsh.engines.dsh
 const OLD_RANGE = '>=0.1.2-alpha.3 <0.2.0'
@@ -228,37 +233,55 @@ const DEP_RANGES = [
   ['@deepseek-ai/dsh-settings (peer)', pkg.peerDependencies['@deepseek-ai/dsh-settings']],
   ['@deepseek-ai/dsh-tools (peer)', pkg.peerDependencies['@deepseek-ai/dsh-tools']],
 ]
+// 三列：[版本, 严格模式（pnpm 安装期）, 宿主闸模式（includePrerelease，决定能否加载）]。
+// 两列都由宿主自带 semver 7.x 逐行实测得出（见下方交叉验证）。
 const DECISION_TABLE = [
-  ['0.1.2-alpha.3', true],
-  ['0.1.2-rc.1', true],
-  ['0.1.3', true],
-  ['0.1.4', true],
-  ['0.1.5-alpha.1', true],
-  ['0.1.5-rc.1', true],
-  ['0.1.5', true],
-  ['0.1.6', true],
-  ['0.1.7-alpha.1', true],
-  ['0.1.7-rc.1', true],
-  ['0.1.7', true],
+  // [version, strictMode(pnpm), hostGateMode(app-boot)]
+  ['0.1.2-alpha.3', true, true],
+  ['0.1.2-rc.1', true, true],
+  ['0.1.3', true, true],
+  ['0.1.4', true, true],
+  ['0.1.5-alpha.1', true, true],
+  ['0.1.5-rc.1', true, true],
+  ['0.1.5', true, true],
+  ['0.1.6', true, true],
+  ['0.1.7-alpha.1', true, true],
+  ['0.1.7-rc.1', true, true],
+  ['0.1.7', true, true],
   // 0.2.0 适配轮（2026-09-29）：宿主实测 0.2.0-rc.1，新区间必须放行 0.2.x 全系。
   // 上一轮这里断言 0.2.0 === false（当时未验证，故意拦住），本轮已验证 → 有意翻转。
-  ['0.2.0-alpha.0', true],
-  ['0.2.0-rc.1', true],
-  ['0.2.0', true],
-  ['0.2.3', true],
-  ['0.1.9-alpha.1', false],
-  ['0.1.8', false],
-  ['0.3.0', false],
+  ['0.2.0-alpha.0', true, true],
+  ['0.2.0-rc.1', true, true],
+  ['0.2.0', true, true],
+  // 0.2.1 适配轮（2026-10-20）：宿主实测 0.2.1-rc.2。这三行在**旧四段区间**下
+  // 是分叉行（strict=false / host=true，见下方反证），补 0.2.1 段后转为两列一致。
+  // 也就是说：0.2.1 段修的是 pnpm 安装期严格模式，不是加载闸。
+  ['0.2.1-alpha.0', true, true],
+  ['0.2.1-rc.1', true, true],
+  ['0.2.1-rc.2', true, true],
+  ['0.2.1', true, true],
+  ['0.2.3', true, true],
+  // 分叉行：上界自身的预发布。宿主闸放行（预发布可见性被绕过），严格模式拒绝。
+  // 这不是缺陷，是 npm semver 的既定语义；写下来是为了让两套判定的差异可见。
+  ['0.1.8-rc.1', false, true],
+  ['0.2.2-rc.1', false, true],
+  ['0.3.0-alpha.0', false, true],
+  // 真正被排除的：上界正式版本身及其后的大版本
+  ['0.1.8', false, false],
+  ['0.1.9-alpha.1', false, false],
+  ['0.3.0', false, false],
 ]
 
-for (const [version, expected] of DECISION_TABLE) {
-  assert.equal(satisfies(version, DECLARED), expected, 'dsh.engines.dsh must ' + (expected ? 'cover ' : 'exclude ') + version)
+for (const [version, strict, host] of DECISION_TABLE) {
+  assert.equal(satisfies(version, DECLARED), strict, '严格模式对 ' + version + ' 的判定应为 ' + strict)
+  assert.equal(satisfiesHost(version, DECLARED), host, '宿主闸模式对 ' + version + ' 的判定应为 ' + host)
   for (const [name, range] of DEP_RANGES) {
-    assert.equal(satisfies(version, range), expected, 'peer range for ' + name + ' must ' + (expected ? 'cover ' : 'exclude ') + version)
+    assert.equal(satisfies(version, range), strict, 'peer range for ' + name + '（严格模式）对 ' + version + ' 的判定应为 ' + strict)
+    assert.equal(satisfiesHost(version, range), host, 'peer range for ' + name + '（宿主闸）对 ' + version + ' 的判定应为 ' + host)
   }
 }
 assert.deepEqual([...ENTRY.inject], ['tools'], 'inject 声明不得回退')
-ok('engines 判定表 ' + DECISION_TABLE.length + ' 行逐行通过（含 0.1.7-rc.1 / 0.2.0 覆盖，0.1.8 与 0.3.0 排除）')
+ok('engines 判定表 ' + DECISION_TABLE.length + ' 行 × 2 模式逐行通过（覆盖到 0.2.1-rc.2，0.1.8 与 0.3.0 排除）')
 
 assert.equal(satisfies('0.1.7-rc.1', OLD_RANGE), false, '旧单区间本不应覆盖 0.1.7-rc.1，判定器写反了')
 assert.notEqual(DECLARED, OLD_RANGE)
@@ -271,6 +294,18 @@ const OLD_THREE_CLAUSE = '>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=
 assert.equal(satisfies('0.2.0-rc.1', OLD_THREE_CLAUSE), false, '旧三段区间本不应覆盖 0.2.0-rc.1，判定器写反了')
 assert.equal(satisfies('0.2.0-rc.1', DECLARED), true, '新区间必须覆盖 0.2.0-rc.1')
 ok('反证：旧三段区间不覆盖 0.2.0-rc.1（故新段非冗余声明）')
+
+// 反证：0.2.1 适配轮——旧四段区间在**严格模式**下不覆盖 0.2.1-rc.2，故 0.2.1 段非冗余。
+// 与 0.2.0 那轮的关键差异（本轮订正，别照抄上一轮的说法）：
+//   - 0.2.0-rc.1 在旧区间下宿主闸也拒绝（区间里根本没有 0.2.x 段）；
+//   - 0.2.1-rc.2 在旧区间下宿主闸照样放行（`>=0.2.0-alpha.0 <0.3.0` 的上界自身预发布
+//     被 includePrerelease 绕过，纯比较器下 0.2.1-rc.2 < 0.3.0 成立）。
+// 本轮已用宿主自带闸函数复核：evaluatePluginCompatibility(旧 manifest, {}, '0.2.1-rc.2') → undefined（PASS）。
+const OLD_FOUR_CLAUSE = '>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8 || >=0.2.0-alpha.0 <0.3.0'
+assert.equal(satisfies('0.2.1-rc.2', OLD_FOUR_CLAUSE), false, '旧四段区间在严格模式下本不应覆盖 0.2.1-rc.2，判定器写反了')
+assert.equal(satisfiesHost('0.2.1-rc.2', OLD_FOUR_CLAUSE), true, '旧四段区间在宿主闸下本就放行 0.2.1-rc.2（上界预发布被绕过）——故本轮不是「加载被拒」')
+assert.equal(satisfies('0.2.1-rc.2', DECLARED), true, '新区间必须在严格模式下也覆盖 0.2.1-rc.2（pnpm 安装期）')
+ok('反证：旧四段区间 strict 拒 0.2.1-rc.2 而 host 放行（故新段修的是 pnpm 安装期，非加载闸）')
 
 // 兼容闸（dsh-app-boot 的 evaluatePluginCompatibility）**只**遍历 peerDependencies 里
 // @deepseek-ai/dsh* 的条目，**从不读 dsh.engines.dsh**（全树 grep 零消费者）。
@@ -299,11 +334,17 @@ ok('3 个 dsh-* peer 区间与 dsh.engines.dsh 逐字一致（闸只认 peer）'
     } catch { /* .pnpm absent */ }
   }
   if (semver && typeof semver.satisfies === 'function') {
-    for (const [version, expected] of DECISION_TABLE) {
-      assert.equal(semver.satisfies(version, DECLARED), expected, 'real semver disagrees for ' + version)
-      for (const [name, range] of DEP_RANGES) assert.equal(semver.satisfies(version, range), expected, 'real semver disagrees for ' + name + ' at ' + version)
+    // 两列都要对：严格模式对 `satisfies(v, r)`，宿主闸模式对
+    // `satisfies(v, r, { includePrerelease: true })` —— 后者才决定能否加载。
+    for (const [version, strict, host] of DECISION_TABLE) {
+      assert.equal(semver.satisfies(version, DECLARED), strict, 'real semver (strict) disagrees for ' + version)
+      assert.equal(semver.satisfies(version, DECLARED, { includePrerelease: true }), host, 'real semver (host gate) disagrees for ' + version)
+      for (const [name, range] of DEP_RANGES) {
+        assert.equal(semver.satisfies(version, range), strict, 'real semver (strict) disagrees for ' + name + ' at ' + version)
+        assert.equal(semver.satisfies(version, range, { includePrerelease: true }), host, 'real semver (host gate) disagrees for ' + name + ' at ' + version)
+      }
     }
-    ok('内置判定器与真实 semver.satisfies 逐行一致（' + DECISION_TABLE.length + ' 行 × ' + (1 + DEP_RANGES.length) + ' 个区间）')
+    ok('内置判定器与真实 semver.satisfies 逐行一致（' + DECISION_TABLE.length + ' 行 × 2 模式 × ' + (1 + DEP_RANGES.length) + ' 个区间）')
   } else {
     ok('semver 不可解析，跳过交叉验证（不假绿）')
   }

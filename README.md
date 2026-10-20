@@ -181,7 +181,7 @@ when those packages are unresolvable.
 
 | Item | Value |
 |---|---|
-| DeepSeek Harness | `>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8 || >=0.2.0-alpha.0 <0.3.0` (contract-verified on 0.1.2-rc.1, 0.1.5-rc.1 and 0.1.7-rc.1) |
+| DeepSeek Harness | `>=0.1.2-alpha.3 <0.1.8 \|\| >=0.1.5-alpha.1 <0.1.6 \|\| >=0.1.7-alpha.0 <0.1.8 \|\| >=0.2.0-alpha.0 <0.3.0 \|\| >=0.2.1-alpha.0 <0.3.0` (contract-verified on 0.1.2-rc.1, 0.1.5-rc.1, 0.1.7-rc.1, 0.2.0-rc.1 and 0.2.1-rc.2) |
 | Node.js | `>=22` |
 | Runtime dependencies | **none** — the three deps come from the dsh host install |
 
@@ -206,6 +206,25 @@ PRs welcome! Please:
 1. Keep zero extra deps
 2. Add a strategy under `src/strategies/` with unit tests
 3. Update both `zh`/`en` locales in `lib/client.js` if adding settings
+
+## dsh 0.2.1-rc.2 适配结论
+
+对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.1-rc.2`）做了 asar 解包源码比对 + **宿主真闸实跑**：
+
+- **契约点零漂移**：`dsh-tools` 的 `defineTool`、`dsh-settings` 的 `configure()`/`volatileForm`、
+  `dsh-web` 的 `registerSearchProvider`、client 的 `configForms.whileServed` 与 `slots.inject`
+  在 0.2.1 全部保持原形状（官方 `dsh-client-ui-settings-web-search` 自己也仍
+  `require("@deepseek-ai/dsh-client-ui-primitives")`）。**`src/` 与 `lib/client.js` 未改一行。**
+- **本轮补的是 pnpm 安装期，不是加载闸**：旧四段区间在真闸下 `evaluatePluginCompatibility(...) → undefined`（PASS），
+  即 0.2.1 下本来就能加载；被拒的是**严格模式**（`semver.satisfies` 默认选项，pnpm 安装期）。
+  真负例 `>=0.1.7-alpha.0 <0.1.8` 被判 REJECT，证明闸确实在判。
+- **闸语义在 0.2.1 变了**：`unmetRequirements` 现在「顶层 `engines.dsh` 存在时它独自判定、peers 被忽略」。
+  本仓区间写在嵌套的 `dsh.engines.dsh`（不是顶层），故实际仍由 peers 判定——真闸实测确认。
+- **两个 semver 模式并存**：测试改成两列（严格 / 宿主闸 `includePrerelease:true`），三处分叉行
+  （`0.1.8-rc.1` / `0.2.2-rc.1` / `0.3.0-alpha.0`）显式钉住，避免把 `<0.3.0` 误读成「0.3 全拦」。
+- 验证：`npm test` 17 + 7 组 + cdp/tavily/frames/client 全绿，**0 skipped**；host-integration 跑在
+  真实的 `dsh-tools`/`dsh-settings`/`dsh-system-prompt@0.2.1-rc.2` 上。
+
 
 ## dsh 0.2.0-rc.1 适配结论
 
