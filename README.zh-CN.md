@@ -192,6 +192,55 @@ pnpm test:client   # 只跑浏览器半结构/交互测试
 - CDP 依赖节点原生 `http` 模块手工实现 WebSocket，未使用第三方的 `ws` 库；未启用 `permessage-deflate` 压缩（仅发送协商头，服务端如回传压缩帧则本插件会忽略 continuation 帧，当前 cloakbrowser 默认不启用压缩因此兼容）；
 - DSH 版本兼容：`>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8 || >=0.2.0-alpha.0 <0.3.0`（已在 0.1.2-rc.1、0.1.5-rc.1、0.1.7-rc.1 做过契约级对照）；为什么必须加析取区间：npm semver 的预发布同元组规则使旧单区间覆盖不了 `0.1.5-rc.1` / `0.1.7-rc.1`。机器可读声明在 `package.json` 的 `dsh.engines.dsh` 与 `peerDependencies`。
 
+## dsh 0.2.2-rc.1 适配结论
+
+对桌面端 `D:\DeepSeek Harness\`（`resources/app.asar/dsh/package.json` 里 `dsh` = `0.2.2-rc.1`）
+做了 asar 解包源码比对 + **宿主真闸实跑**：
+
+- **唯一必改项是兼容区间**。用宿主自带 `evaluatePluginCompatibility` 实测：旧的五段区间在
+  `0.2.2-rc.1` 下返回 `undefined`（PASS），**插件并没有被加载闸拒**；拒它的是**严格模式**
+  （`semver.satisfies` 默认选项，pnpm 安装期）。四条区间串（三个 peer + `dsh.engines.dsh`）各
+  追加 `|| >=0.2.2-alpha.0 <0.3.0`，并用**真负例**验证：`0.3.0` 下闸返回 requirements（REJECT）。
+- **契约面零漂移**（0.2.2-rc.1 源码级核对）：`dsh-tools/lib/index.js:433`
+  `register(definition, options = {})`（`:436` 仍强制 `output.schema` + `output.render`）、
+  `dsh-tools/lib/index.js:417` `super(ctx, "tools")`、`dsh-settings/lib/index.js:370`
+  `configure(presentation, owner = this.ctx.fiber)`（`auto` 默认 true）、`cordis/lib/index.js:1672`
+  `inject(inject, callback)`，client 侧 `configForms.whileServed` / `slots.inject` /
+  `locale.register` 全部保持原形状。**`src/` 与 `lib/client.js` 未改一行。**
+- **唯一真实漂移在测试夹具，不在插件**：`dsh-settings` 的 `describe()` 现在从
+  `entry.fiber.effectiveConfig` 取活值（`dsh-settings/lib/index.js:436`，getter 在
+  `cordis/lib/index.js:653` `get effectiveConfig()`），0.2.1 时代读的是 `fiber.config`。
+  `tests/host-integration.test.mjs` 的假 fiber 只给了 `config`，于是 `describe()` 返回
+  `value: undefined`。修法是假 fiber **两个键都给**，让夹具同时满足新旧宿主，而不是替宿主做选择。
+- **`@deepseek-ai/schemastery`**：宿主自带 `3.19.0`，`dsh-settings@0.2.2-rc.1` 要求 `~3.19.0`。
+  peer 放宽成 `~3.18.4 || ~3.19.0`，并在 `devDependencies` 里**显式钉 `3.19.0`**——否则 peer
+  自动安装会解析成 `3.18.4`，测试跑在旧夹具上。`pnpm peers check`：无问题。
+- **两种 semver 模式继续并列**在判定表里（严格 / 宿主闸 `includePrerelease: true`）。
+  `0.2.2-rc.1` 由分叉行（`false / true`）转为两列一致（`true / true`）；`0.3.0-alpha.0`
+  **故意仍是分叉行**，因为 `<0.3.0` 在 `includePrerelease` 下会放行自己的预发布。
+- 验证：`npm test` → entry **18 组**、host-integration **7 组**、cdp-unit **21 项**、
+  tavily-unit 全绿、cdp-frames **5 例**、client-smoke **19 项**，**0 skipped**；`pnpm peers check` 干净；
+  删掉新段后守护变红（变异测试）。
+- 完整取证、改动清单与诚实缺口见 `docs/DSH-0.2.2-ADAPTATION.md`。
+
+## dsh 0.2.1-rc.2 适配结论
+
+对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.1-rc.2`）做了 asar 解包源码比对 + **宿主真闸实跑**：
+
+- **契约点零漂移**：`dsh-tools` 的 `defineTool`、`dsh-settings` 的 `configure()`/`volatileForm`、
+  `dsh-web` 的 `registerSearchProvider`、client 的 `configForms.whileServed` 与 `slots.inject`
+  在 0.2.1 全部保持原形状（官方 `dsh-client-ui-settings-web-search` 自己也仍
+  `require("@deepseek-ai/dsh-client-ui-primitives")`）。**`src/` 与 `lib/client.js` 未改一行。**
+- **本轮补的是 pnpm 安装期，不是加载闸**：旧四段区间在真闸下 `evaluatePluginCompatibility(...) → undefined`（PASS），
+  即 0.2.1 下本来就能加载；被拒的是**严格模式**（`semver.satisfies` 默认选项，pnpm 安装期）。
+  真负例 `>=0.1.7-alpha.0 <0.1.8` 被判 REJECT，证明闸确实在判。
+- **闸语义在 0.2.1 变了**：`unmetRequirements` 现在「顶层 `engines.dsh` 存在时它独自判定、peers 被忽略」。
+  本仓区间写在嵌套的 `dsh.engines.dsh`（不是顶层），故实际仍由 peers 判定——真闸实测确认。
+- **两个 semver 模式并存**：测试改成两列（严格 / 宿主闸 `includePrerelease:true`），分叉行
+  显式钉住，避免把 `<0.3.0` 误读成「0.3 全拦」。
+- 验证：`npm test` 全绿，**0 skipped**；host-integration 跑在真实的
+  `dsh-tools`/`dsh-settings`/`dsh-system-prompt@0.2.1-rc.2` 上。
+
 ## dsh 0.2.0-rc.1 适配结论
 
 对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.0-rc.1`）做了 asar 解包源码比对 +
@@ -200,12 +249,12 @@ pnpm test:client   # 只跑浏览器半结构/交互测试
 - **唯一必改项是兼容区间**：原区间在 0.2.0-rc.1 下被启动闸拒绝
   （`dsh: skipping profile bundle ...`），插件**整个 bundle 不加载**（web 与 desktop 同时失效）。
   追加 `|| >=0.2.0-alpha.0 <0.3.0` 后放行。
-- **闸只读 `peerDependencies`**：判定函数（`dsh-app-boot` 的
-  `evaluatePluginCompatibility`）只遍历 `peerDependencies` 里 `@deepseek-ai/dsh*` 的条目，
-  **从不读 `dsh.engines.dsh`**（全树 grep 零消费者）。两者必须逐字一致，测试已守护。
+- **闸的判定顺序**：判定函数（`dsh-app-boot` 的 `evaluatePluginCompatibility` → `unmetRequirements`）
+  先看**顶层** `package.json.engines.dsh`，存在则它独自判定、peers 全忽略；否则才逐条遍历
+  `peerDependencies` 里的 `@deepseek-ai/dsh*`。本仓区间写在嵌套的 `dsh.engines.dsh`，故闸看不到它，
+  peer 才是决定生死的声明。两者必须逐字一致，测试已守护。
 - **两种 semver 模式**：宿主闸用 `includePrerelease: true`，此时「预发布可见性」规则被绕过，
   于是**上界自身的预发布也被放行**（`<0.1.8` 放行 `0.1.8-rc.1`、`<0.3.0` 放行 `0.3.0-alpha.0`）；
   严格模式（pnpm 安装期）会拒绝它们。所以上界拦的是**正式版**，不是预发布。
   若要连预发布一起拒，上界须写成 `<0.3.0-0`。
 - **凭证细节**：详细取证、改动清单、测试结果与诚实缺口见 `docs/DSH-0.2.0-ADAPTATION.md`。
-

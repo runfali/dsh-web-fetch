@@ -153,7 +153,7 @@ ok('禁用态文案含字段名 + 当前值 + 插件页指引')
 // 2. 声明面
 // ---------------------------------------------------------------------------
 
-assert.equal(pkg.version, '0.2.1-rc.2', '版本号必须跟宿主发布号（家族惯例）')
+assert.equal(pkg.version, '0.2.2-rc.1', '版本号必须跟宿主发布号（家族惯例）')
 assert.equal(pkg.main, 'src/index.js')
 assert.equal(pkg.exports['.'], './src/index.js')
 assert.equal(pkg.exports['./client'], './lib/client.js')
@@ -162,7 +162,7 @@ assert.equal(pkg.dsh.client.platform, 'web')
 for (const f of ['src', 'lib', 'tests', 'cordis.patch.yml', 'README.md', 'LICENSE']) {
   assert.ok(pkg.files.includes(f), 'files must ship ' + f)
 }
-ok('manifest：version 0.2.1-rc.2 / exports / bundle patch / client 平台声明')
+ok('manifest：version 0.2.2-rc.1 / exports / bundle patch / client 平台声明')
 
 // ---------------------------------------------------------------------------
 // 3. engines 判定表（内置手写比较器，不引 semver 依赖）
@@ -260,11 +260,17 @@ const DECISION_TABLE = [
   ['0.2.1-rc.1', true, true],
   ['0.2.1-rc.2', true, true],
   ['0.2.1', true, true],
+  // 0.2.2 适配轮（2026-11-06）：宿主实测 0.2.2-rc.1。这两行在**旧五段区间**下是分叉行
+  // （strict=false / host=true，见下方反证），补 0.2.2 段后转为两列一致。
+  // 与 0.2.0 那轮的关键差异：0.2.0 在旧区间下加载闸也拒；0.2.2 加载闸本来就放行，
+  // 所以这一轮修的是 pnpm 安装期严格模式，不是「插件被跳过」。
+  ['0.2.2-alpha.0', true, true],
+  ['0.2.2-rc.1', true, true],
+  ['0.2.2', true, true],
   ['0.2.3', true, true],
   // 分叉行：上界自身的预发布。宿主闸放行（预发布可见性被绕过），严格模式拒绝。
   // 这不是缺陷，是 npm semver 的既定语义；写下来是为了让两套判定的差异可见。
   ['0.1.8-rc.1', false, true],
-  ['0.2.2-rc.1', false, true],
   ['0.3.0-alpha.0', false, true],
   // 真正被排除的：上界正式版本身及其后的大版本
   ['0.1.8', false, false],
@@ -281,7 +287,7 @@ for (const [version, strict, host] of DECISION_TABLE) {
   }
 }
 assert.deepEqual([...ENTRY.inject], ['tools'], 'inject 声明不得回退')
-ok('engines 判定表 ' + DECISION_TABLE.length + ' 行 × 2 模式逐行通过（覆盖到 0.2.1-rc.2，0.1.8 与 0.3.0 排除）')
+ok('engines 判定表 ' + DECISION_TABLE.length + ' 行 × 2 模式逐行通过（覆盖到 0.2.2-rc.1，0.1.8 与 0.3.0 排除）')
 
 assert.equal(satisfies('0.1.7-rc.1', OLD_RANGE), false, '旧单区间本不应覆盖 0.1.7-rc.1，判定器写反了')
 assert.notEqual(DECLARED, OLD_RANGE)
@@ -307,9 +313,23 @@ assert.equal(satisfiesHost('0.2.1-rc.2', OLD_FOUR_CLAUSE), true, '旧四段区�
 assert.equal(satisfies('0.2.1-rc.2', DECLARED), true, '新区间必须在严格模式下也覆盖 0.2.1-rc.2（pnpm 安装期）')
 ok('反证：旧四段区间 strict 拒 0.2.1-rc.2 而 host 放行（故新段修的是 pnpm 安装期，非加载闸）')
 
-// 兼容闸（dsh-app-boot 的 evaluatePluginCompatibility）**只**遍历 peerDependencies 里
-// @deepseek-ai/dsh* 的条目，**从不读 dsh.engines.dsh**（全树 grep 零消费者）。
-// 因此 peer 才是决定插件生死的声明；engines 只影响 pnpm 安装期。两者必须逐字一致。
+// 反证：0.2.2 适配轮——旧五段区间在**严格模式**下不覆盖 0.2.2-rc.1，故 0.2.2 段非冗余。
+// 本轮已用宿主自带闸函数复核（真 manifest，runtime=0.2.2-rc.1 与 0.3.0）：
+// evaluatePluginCompatibility(旧 manifest, {}, '0.2.2-rc.1') → undefined（PASS），
+// evaluatePluginCompatibility(旧 manifest, {}, '0.3.0') → 非空（REJECT，真负例）。
+// 即：新增段并不改变「能不能加载」，只改变 pnpm 安装期能否落 0.2.2 系列。
+const OLD_FIVE_CLAUSE = '>=0.1.2-alpha.3 <0.1.8 || >=0.1.5-alpha.1 <0.1.6 || >=0.1.7-alpha.0 <0.1.8 || >=0.2.0-alpha.0 <0.3.0 || >=0.2.1-alpha.0 <0.3.0'
+assert.equal(satisfies('0.2.2-rc.1', OLD_FIVE_CLAUSE), false, '旧五段区间在严格模式下本不应覆盖 0.2.2-rc.1，判定器写反了')
+assert.equal(satisfiesHost('0.2.2-rc.1', OLD_FIVE_CLAUSE), true, '旧五段区间在宿主闸下本就放行 0.2.2-rc.1（上界预发布被绕过）——故本轮不是「加载被拒」')
+assert.equal(satisfies('0.2.2-rc.1', DECLARED), true, '新区间必须在严格模式下也覆盖 0.2.2-rc.1（pnpm 安装期）')
+ok('反证：旧五段区间 strict 拒 0.2.2-rc.1 而 host 放行（故新段修的是 pnpm 安装期，非加载闸）')
+
+// 兼容闸（dsh-app-boot 的 evaluatePluginCompatibility → unmetRequirements）的判定顺序
+// （0.2.2-rc.1 实测，dsh-app-boot/lib/index.js:1097-1116）：
+//   1) **顶层** package.json.engines.dsh 存在 → 只用它判定，peers 全部忽略；
+//   2) 否则逐条遍历 peerDependencies 里的 @deepseek-ai/dsh 与 @deepseek-ai/dsh-*。
+// 本仓的区间写在 **dsh.engines.dsh**（嵌套在 "dsh" 键下，不是顶层 engines），所以闸看不到它，
+// peer 才是决定插件生死的声明；engines 只影响 pnpm 安装期。两者必须逐字一致。
 for (const [name, range] of DEP_RANGES) {
   assert.equal(range, DECLARED, name + ' 的区间必须与 dsh.engines.dsh 逐字一致（闸只认 peer）')
 }

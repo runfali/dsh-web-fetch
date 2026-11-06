@@ -181,7 +181,7 @@ when those packages are unresolvable.
 
 | Item | Value |
 |---|---|
-| DeepSeek Harness | `>=0.1.2-alpha.3 <0.1.8 \|\| >=0.1.5-alpha.1 <0.1.6 \|\| >=0.1.7-alpha.0 <0.1.8 \|\| >=0.2.0-alpha.0 <0.3.0 \|\| >=0.2.1-alpha.0 <0.3.0` (contract-verified on 0.1.2-rc.1, 0.1.5-rc.1, 0.1.7-rc.1, 0.2.0-rc.1 and 0.2.1-rc.2) |
+| DeepSeek Harness | `>=0.1.2-alpha.3 <0.1.8 \|\| >=0.1.5-alpha.1 <0.1.6 \|\| >=0.1.7-alpha.0 <0.1.8 \|\| >=0.2.0-alpha.0 <0.3.0 \|\| >=0.2.1-alpha.0 <0.3.0 \|\| >=0.2.2-alpha.0 <0.3.0` (contract-verified on 0.1.2-rc.1, 0.1.5-rc.1, 0.1.7-rc.1, 0.2.0-rc.1, 0.2.1-rc.2 and 0.2.2-rc.1) |
 | Node.js | `>=22` |
 | Runtime dependencies | **none** — the three deps come from the dsh host install |
 
@@ -189,9 +189,9 @@ when those packages are unresolvable.
 > itself carries a prerelease with the same `[major, minor, patch]` tuple. The previous
 > single `>=0.1.2-alpha.3 <0.2.0` group therefore did **not** cover `0.1.5-rc.1` —
 > "claims 0.1.5 support but fails its own claim". The same trap applies to every
-> dependency range on a dsh package. `tests/entry.test.mjs` pins this with a 13-row
-> decision table, a counter-proof against the old range, and a line-by-line cross-check
-> against the host's real `semver.satisfies`.
+> dependency range on a dsh package. `tests/entry.test.mjs` pins this with a 27-row
+> decision table (both strict and host-gate mode), a counter-proof per adaptation round,
+> and a line-by-line cross-check against the host's real `semver.satisfies`.
 
 ## Limitations & Notes
 
@@ -207,41 +207,86 @@ PRs welcome! Please:
 2. Add a strategy under `src/strategies/` with unit tests
 3. Update both `zh`/`en` locales in `lib/client.js` if adding settings
 
-## dsh 0.2.1-rc.2 适配结论
+## dsh 0.2.2-rc.1 adaptation notes
 
-对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.1-rc.2`）做了 asar 解包源码比对 + **宿主真闸实跑**：
+Verified against the desktop install at `D:\DeepSeek Harness\` (`dsh` `0.2.2-rc.1` from
+`resources/app.asar/dsh/package.json`) by unpacking the host sources and running the host's
+**real** compatibility gate — not by reading version strings.
 
-- **契约点零漂移**：`dsh-tools` 的 `defineTool`、`dsh-settings` 的 `configure()`/`volatileForm`、
-  `dsh-web` 的 `registerSearchProvider`、client 的 `configForms.whileServed` 与 `slots.inject`
-  在 0.2.1 全部保持原形状（官方 `dsh-client-ui-settings-web-search` 自己也仍
-  `require("@deepseek-ai/dsh-client-ui-primitives")`）。**`src/` 与 `lib/client.js` 未改一行。**
-- **本轮补的是 pnpm 安装期，不是加载闸**：旧四段区间在真闸下 `evaluatePluginCompatibility(...) → undefined`（PASS），
-  即 0.2.1 下本来就能加载；被拒的是**严格模式**（`semver.satisfies` 默认选项，pnpm 安装期）。
-  真负例 `>=0.1.7-alpha.0 <0.1.8` 被判 REJECT，证明闸确实在判。
-- **闸语义在 0.2.1 变了**：`unmetRequirements` 现在「顶层 `engines.dsh` 存在时它独自判定、peers 被忽略」。
-  本仓区间写在嵌套的 `dsh.engines.dsh`（不是顶层），故实际仍由 peers 判定——真闸实测确认。
-- **两个 semver 模式并存**：测试改成两列（严格 / 宿主闸 `includePrerelease:true`），三处分叉行
-  （`0.1.8-rc.1` / `0.2.2-rc.1` / `0.3.0-alpha.0`）显式钉住，避免把 `<0.3.0` 误读成「0.3 全拦」。
-- 验证：`npm test` 17 + 7 组 + cdp/tavily/frames/client 全绿，**0 skipped**；host-integration 跑在
-  真实的 `dsh-tools`/`dsh-settings`/`dsh-system-prompt@0.2.1-rc.2` 上。
+- **The only mandatory change is the compatibility range.** Measured with the host's own
+  `evaluatePluginCompatibility`: the previous five-clause range returned `undefined` (PASS)
+  on `0.2.2-rc.1`, so the plugin was **not** being rejected at load time. What rejected it was
+  **strict semver mode** (`semver.satisfies` without `includePrerelease`, i.e. pnpm install time).
+  Added `|| >=0.2.2-alpha.0 <0.3.0` to all four strings (three peers + `dsh.engines.dsh`) and
+  verified a **real negative case**: the gate returns requirements for `0.3.0`.
+- **Contract surface unchanged.** Checked at source level on 0.2.2-rc.1:
+  `dsh-tools/lib/index.js:433` `register(definition, options = {})` (still requires
+  `output.schema` + `output.render`, `:436`), `dsh-tools/lib/index.js:417` `super(ctx, "tools")`,
+  `dsh-settings/lib/index.js:370` `configure(presentation, owner = this.ctx.fiber)` with `auto`
+  defaulting to `true`, `cordis/lib/index.js:1672` `inject(inject, callback)`, and the client
+  side `configForms.whileServed` / `slots.inject` / `locale.register`. **`src/` and
+  `lib/client.js` were not touched.**
+- **One real drift, in the test fixture, not the plugin.** `dsh-settings` `describe()` now reads
+  the live value from `entry.fiber.effectiveConfig` (`dsh-settings/lib/index.js:436`; the getter is
+  `cordis/lib/index.js:653` `get effectiveConfig()`), where 0.2.1 used `fiber.config`. The
+  settings harness in `tests/host-integration.test.mjs` faked only `config`, so `describe()` returned
+  `value: undefined`. Both keys are now provided on the fake fiber, so the fixture satisfies old
+  and new hosts without pretending to know which one is running.
+- **`@deepseek-ai/schemastery`:** the host ships `3.19.0` and `dsh-settings@0.2.2-rc.1` requires
+  `~3.19.0`. Peer widened to `~3.18.4 || ~3.19.0` and `3.19.0` pinned explicitly in
+  `devDependencies` — otherwise peer auto-install resolves `3.18.4` and the tests run against the
+  old fixture. `pnpm peers check`: no issues.
+- **Two semver modes stay side by side** in the decision table (strict / host gate with
+  `includePrerelease: true`). `0.2.2-rc.1` moved from a fork row (`false / true`) to a consistent
+  row (`true / true`) now that the clause exists; `0.3.0-alpha.0` deliberately stays a fork row,
+  because `<0.3.0` under `includePrerelease` lets its own prerelease through.
+- Verification: `npm test` → entry **18 groups**, host-integration **7 groups**, cdp-unit **21**,
+  tavily-unit all green, cdp-frames **5 tests**, client-smoke **19 checks**, **0 skipped**;
+  `pnpm peers check` clean; stripping the new clause turns the guard red (mutation test).
+- Full evidence, change list and honest gaps: `docs/DSH-0.2.2-ADAPTATION.md`.
 
+## dsh 0.2.1-rc.2 adaptation notes
 
-## dsh 0.2.0-rc.1 适配结论
+Unpacked host comparison + a live run of the host's real gate against the desktop install
+(`0.2.1-rc.2`):
 
-对桌面端 `D:\DeepSeek Harness\`（`FileVersion 0.2.0-rc.1`）做了 asar 解包源码比对 +
-**真机闸实测**。要点：
+- **Zero drift on the contract surface**: `dsh-tools` `defineTool`, `dsh-settings`
+  `configure()`/`volatileForm`, `dsh-web` `registerSearchProvider`, and the client-side
+  `configForms.whileServed` / `slots.inject` all kept their shape in 0.2.1 (the official
+  `dsh-client-ui-settings-web-search` still requires
+  `@deepseek-ai/dsh-client-ui-primitives` itself). **`src/` and `lib/client.js` unchanged.**
+- **That round repaired pnpm install time, not the load gate**: under the real gate the old
+  four-clause range returned `evaluatePluginCompatibility(...) → undefined` (PASS), so 0.2.1 could
+  already load it. What rejected it was strict mode (`semver.satisfies` defaults, pnpm install
+  time). A real negative case (`>=0.1.7-alpha.0 <0.1.8`) was judged REJECT, proving the gate
+  actually evaluates.
+- **The gate semantics changed in 0.2.1**: `unmetRequirements` now says "if a top-level
+  `engines.dsh` exists it decides alone and peers are ignored". This repo writes its range in the
+  nested `dsh.engines.dsh` (not top-level), so peers still decide — confirmed by the real gate.
+- **Two semver modes coexist**: the table gained a second column (strict / host gate with
+  `includePrerelease: true`), and fork rows were pinned explicitly so `<0.3.0` is never misread
+  as "0.3 is fully blocked".
+- Verification: `npm test` 17 + 7 groups plus cdp/tavily/frames/client all green, **0 skipped**;
+  host-integration runs against the real `dsh-tools`/`dsh-settings`/`dsh-system-prompt@0.2.1-rc.2`.
 
-- **唯一必改项是兼容区间**：原区间在 0.2.0-rc.1 下被启动闸拒绝
-  （`dsh: skipping profile bundle ...`），插件**整个 bundle 不加载**（web 与 desktop 同时失效）。
-  追加 `|| >=0.2.0-alpha.0 <0.3.0` 后放行。
-- **闸只读 `peerDependencies`**：判定函数（`dsh-app-boot` 的
-  `evaluatePluginCompatibility`）只遍历 `peerDependencies` 里 `@deepseek-ai/dsh*` 的条目，
-  **从不读 `dsh.engines.dsh`**（全树 grep 零消费者）。两者必须逐字一致，测试已守护。
-- **两种 semver 模式**：宿主闸用 `includePrerelease: true`，此时「预发布可见性」规则被绕过，
-  于是**上界自身的预发布也被放行**（`<0.1.8` 放行 `0.1.8-rc.1`、`<0.3.0` 放行 `0.3.0-alpha.0`）；
-  严格模式（pnpm 安装期）会拒绝它们。所以上界拦的是**正式版**，不是预发布。
-  若要连预发布一起拒，上界须写成 `<0.3.0-0`。
-- **凭证细节**：详细取证、改动清单、测试结果与诚实缺口见 `docs/DSH-0.2.0-ADAPTATION.md`。
+## dsh 0.2.0-rc.1 adaptation notes
+
+Unpacked host comparison + a live run of the real gate against `0.2.0-rc.1`:
+
+- **The only mandatory change was the compatibility range**: the old range was rejected by the
+  startup gate (`dsh: skipping profile bundle ...`) and the **whole bundle never loaded** (web and
+  desktop both dead). Adding `|| >=0.2.0-alpha.0 <0.3.0` fixed it.
+- **The gate reads only `peerDependencies`**: `evaluatePluginCompatibility` in `dsh-app-boot`
+  iterates the `@deepseek-ai/dsh*` entries of `peerDependencies` and **never reads
+  `dsh.engines.dsh`** (zero consumers in the tree). The two must stay byte-identical — a test
+  guards it.
+- **Two semver modes**: the host gate uses `includePrerelease: true`, which bypasses prerelease
+  visibility, so **the upper bound's own prerelease is admitted too** (`<0.1.8` admits
+  `0.1.8-rc.1`, `<0.3.0` admits `0.3.0-alpha.0`); strict mode rejects them. The upper bound blocks
+  the **release**, not the prereleases. To block prereleases as well the bound must be written
+  `<0.3.0-0`.
+- **Evidence**: see `docs/DSH-0.2.0-ADAPTATION.md` for the full trace, change list, test results
+  and honest gaps.
 
 
 ## License
@@ -255,4 +300,3 @@ PRs welcome! Please:
 完整中文文档请见 **[README.zh-CN.md](README.zh-CN.md)**。
 
 **dsh-web-fetch** 是 DeepSeek Harness 的通用网页内容获取插件，提供 **双数据源、可插拔策略** 能力。核心设计是规避 `registerSearchProvider` 的 `WEB_PROVIDER_AMBIGUOUS` 限制，将每个数据源注册为独立工具，由 LLM 自主决策。`lib/client.js` 内置完整中英文界面。
-

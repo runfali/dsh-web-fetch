@@ -181,7 +181,15 @@ function makeSettingsHarness() {
     entries.push({
       id,
       options: { id, config: {} },
-      fiber: { runtime, state: 2, uid: 'uid-' + id, config: resolveConfig(runtime, {}), ctx: root },
+      // 0.2.2-rc.1 起 SettingsForms.describe() 读 `entry.fiber.effectiveConfig`
+      // （dsh-settings/lib/index.js:436；cordis/lib/index.js:653 get effectiveConfig()），
+      // 不再是旧版的 fiber.config。两个键都留着：假 fiber 同时满足新旧宿主，夹具不替宿主做选择。
+      fiber: {
+        runtime, state: 2, uid: 'uid-' + id,
+        config: resolveConfig(runtime, {}),
+        effectiveConfig: resolveConfig(runtime, {}),
+        ctx: root,
+      },
     })
   }
   return { settings, addEntry, userLayer }
